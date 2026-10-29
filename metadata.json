@@ -1,8 +1,0 @@
-{
-  "name": "AFTERLIGHT",
-  "description": "An Object-Oriented Tic-Tac-Toe platform featuring Minimax AI, real-time WebSocket multiplayer, SQLite persistence, and an interactive OOP Lab. Built for B.Tech CSE Object Oriented Programming evaluation.",
-  "requestFramePermissions": [],
-  "majorCapabilities": [
-    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
-  ]
-}
