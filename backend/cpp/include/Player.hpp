@@ -1,4 +1,41 @@
 #ifndef AFTERLIGHT_PLAYER_HPP
+#define AFTERLIGHT_PLAYER_HPP
+
+#include <string>
+#include <memory>
+#include <stdexcept>
+#include <utility>
+#include "Models.hpp"
+#include "Board.hpp"
+
+namespace afterlight {
+
+// ==========================================
+// Abstraction: Pure Abstract Base Class (ABC)
+// ==========================================
+
+class Player {
+protected:
+    std::string m_name;
+    Cell m_mark;
+
+public:
+    Player(std::string name, Cell mark)
+        : m_name(std::move(name)), m_mark(mark) {}
+
+    virtual ~Player() = default;
+
+    // Pure virtual method: Enforces polymorphic contract across all participants
+    virtual int getMove(const Board& board) = 0;
+
+    // Getters
+    const std::string& getName() const { return m_name; }
+    Cell getMark() const { return m_mark; }
+};
+
+// ==========================================
+// Concrete Player: Human Participant
+// ==========================================
 
 class HumanPlayer : public Player {
 private:
