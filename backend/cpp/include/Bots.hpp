@@ -20,6 +20,31 @@ struct BotDecisionExplanation {
     double executionTimeMs;
 };
 
+// ==========================================
+// Abstract Bot Base Class
+// ==========================================
+
+class BotPlayer : public Player {
+protected:
+    std::string m_difficulty;
+    BotDecisionExplanation m_lastExplanation;
+
+public:
+    BotPlayer(std::string name, Cell mark, std::string difficulty)
+        : Player(std::move(name), mark), m_difficulty(std::move(difficulty)) {}
+
+    virtual ~BotPlayer() = default;
+
+    const std::string& getDifficulty() const { return m_difficulty; }
+    const BotDecisionExplanation& getLastExplanation() const { return m_lastExplanation; }
+
+    virtual BotDecisionExplanation explainDecision(const Board& board, int move) = 0;
+};
+
+// ==========================================
+// Tier 1 Bot: Wanderer (Random Selection)
+// ==========================================
+
 class RandomBot : public BotPlayer {
 public:
     explicit RandomBot(std::string name = "Wanderer", Cell mark = Cell::O);
