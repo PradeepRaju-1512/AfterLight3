@@ -1,8 +1,8 @@
 # AFTERLIGHT: Strategic Tic-Tac-Toe Game with Python OOP Domain Engine
 
 **Department of Computer Science & Engineering**  
-**Course Code:** CS204 — Object Oriented Programming Lab (Semester IV)  
-**Project Title:** AFTERLIGHT — Strategic Game Engine with Minimax AI & WebSocket Multiplayer  
+**Course Code:** Object Oriented Programming (Semester III)  
+**Project Title:** AFTERLIGHT
 **Submitted By:** Pradeep Ravish Raju Bethala (251144) & G Keerthi Vardhan (251120)
 
 
