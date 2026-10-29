@@ -182,31 +182,7 @@ OK
 
 ---
 
-## 7. Viva Voce Cheat Sheet (Q&A for Examiner)
-
-### Q1: Why did you decouple the Python engine instead of writing logic in JavaScript?
-**Student Answer:**  
-*"To enforce true Separation of Concerns and clean software architecture. The game domain layer in Python is completely framework-independent and testable via standard unit tests without needing a browser or network connection. The Node.js layer acts purely as a transport bridge."*
-
-### Q2: How did you implement Encapsulation in the Board class?
-**Student Answer:**  
-*"The 3x3 board array is declared as a private attribute `self._grid`. External code cannot write directly to indices. The only way to modify the grid is through `place_mark()`, which enforces bounds checks and verifies the cell is empty, raising custom domain exceptions like `OccupiedCellError`."*
-
-### Q3: What is the difference between Abstraction and Polymorphism in your project?
-**Student Answer:**  
-*"Abstraction is the contract: `Player(ABC)` defines what a player must do via `@abstractmethod def get_move(self, board)`. Polymorphism is the execution: `Game` calls `player.get_move(board)` uniformly on any player, and Python's dynamic dispatch calls the specialized implementation in `RandomBot`, `StrategicBot`, or `UnbeatableBot` at runtime."*
-
-### Q4: How is Minimax implemented in UnbeatableBot?
-**Student Answer:**  
-*"The Minimax algorithm explores the complete game tree recursively. Terminal states return a score (+10 - depth for wins, -10 + depth for losses, 0 for draws). Alpha-Beta pruning maintains $\alpha$ (maximum score guaranteed to maximizer) and $\beta$ (minimum score guaranteed to minimizer). If $\beta \le \alpha$, the branch is pruned, drastically reducing the search space."*
-
-### Q5: Why did you choose Composition over Inheritance for the Game class?
-**Student Answer:**  
-*"Because a Game is not a Board; a Game HAS a Board. By using composition, the Board class focuses strictly on grid state and win-checking, while the Game class focuses on player coordination, turns, and match outcomes. This follows the Single Responsibility Principle and allows Board to be cloned independently during Minimax lookahead."*
-
----
-
-## 8. Project Structure
+## 7. Project Structure
 
 ```
 .
