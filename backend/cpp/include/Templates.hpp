@@ -4,6 +4,44 @@
 #include <array>
 #include <vector>
 #include <string>
+#include <sstream>
+#include <stdexcept>
+#include <algorithm>
+#include <functional>
+#include <ostream>
+#include "Models.hpp"
+
+namespace afterlight {
+
+// ============================================================================
+// 1. Class Template: Generic Fixed-Size Grid Container (Generic Container OOP)
+// Demonstrates template class with parameter types and non-type parameters
+// ============================================================================
+template <typename T, std::size_t N = 9>
+class Grid {
+private:
+    std::array<T, N> m_data;
+
+public:
+    Grid() {
+        m_data.fill(T{});
+    }
+
+    explicit Grid(T initialValue) {
+        m_data.fill(initialValue);
+    }
+
+    explicit Grid(const std::array<T, N>& data) : m_data(data) {}
+
+    // Subscript operator overload for template container
+    T& operator[](std::size_t index) {
+        if (index >= N) {
+            throw PositionOutOfBoundsException(static_cast<int>(index));
+        }
+        return m_data[index];
+    }
+
+    const T& operator[](std::size_t index) const {
         if (index >= N) {
             throw PositionOutOfBoundsException(static_cast<int>(index));
         }
