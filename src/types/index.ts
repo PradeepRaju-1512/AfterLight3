@@ -73,20 +73,99 @@ export interface PolymorphismResultItem {
   className: string;
   parentClass: string;
   difficulty: string;
-  polymorphicInterfaceCalled: string;
   chosenMove: number;
   executionTimeMs: number;
   explanation: {
     algorithm: string;
     principle: string;
-    candidateMoves: number[];
     chosenMove: number;
     rationale: string;
-    complexity: string;
-    minimaxScore?: number;
     nodesEvaluated?: number;
-    pruningCutoffs?: number;
-    evaluations?: Record<string, number>;
+    cutoffs?: number;
   };
   boardAfterMove: string;
+}
+
+export interface OperatorOverloadResult {
+  engine: string;
+  concept: string;
+  initialBoard: string;
+  operators: {
+    subscript: {
+      signature: string;
+      readIndex: number;
+      readValue: string;
+      boundsCheckEnforced: boolean;
+      explanation: string;
+    };
+    equality: {
+      signatures: string[];
+      b1_equals_b2: boolean;
+      b1_not_equals_empty: boolean;
+      explanation: string;
+    };
+    addition: {
+      signature: string;
+      moveApplied: string;
+      success: boolean;
+      resultBoard: string;
+      originalBoardUnchanged: string;
+      explanation: string;
+    };
+    compoundAddition: {
+      signature: string;
+      success: boolean;
+      resultBoard: string;
+      explanation: string;
+    };
+    streamInsertion: {
+      signature: string;
+      formattedStream: string;
+      explanation: string;
+    };
+  };
+}
+
+export interface TemplatesResult {
+  engine: string;
+  concept: string;
+  templates: {
+    classTemplateGrid: {
+      declaration: string;
+      instanceTypeCell: string;
+      cellCountX: number;
+      cellCountO: number;
+      instanceTypeInt: string;
+      centerWeight: number;
+      explanation: string;
+    };
+    classTemplateHistory: {
+      declaration: string;
+      instanceType: string;
+      recordedMoves: number;
+      lastMovePosition: number;
+      explanation: string;
+    };
+    functionTemplateScoring: {
+      declaration: string;
+      intResult: number;
+      doubleResult: number;
+      explanation: string;
+    };
+    templateSpecialization: {
+      declaration: string;
+      specializedMethod: string;
+      joinedSample: string;
+      explanation: string;
+    };
+  };
+}
+
+export interface ClassRegistryItem {
+  name: string;
+  module: string;
+  baseClasses: string[];
+  isAbstract: boolean;
+  isTemplate?: boolean;
+  methods: string[];
 }
