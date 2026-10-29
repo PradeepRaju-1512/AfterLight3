@@ -3,9 +3,8 @@
 **Department of Computer Science & Engineering**  
 **Course Code:** CS204 — Object Oriented Programming Lab (Semester IV)  
 **Project Title:** AFTERLIGHT — Strategic Game Engine with Minimax AI & WebSocket Multiplayer  
-**Submitted By:** B.Tech CSE 2nd Year Student (Roll No: 22BCE1042)  
-**Academic Year:** 2024–2025  
-**Submission Date:** October 2026 / Semester Evaluation  
+**Submitted By:** Pradeep Ravish Raju Bethala (251144) & G Keerthi Vardhan (251120)
+
 
 ---
 
