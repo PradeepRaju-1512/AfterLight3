@@ -1,15 +1,18 @@
 {
-  "name": "afterlight-oops-project",
+  "name": "afterlight",
   "private": true,
   "version": "1.0.0",
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
     "start": "tsx server.ts",
-    "build": "vite build",
+    "build:engine": "bash backend/cpp/build.sh",
+    "build": "npm run build:engine && vite build",
+    "test:engine": "bash backend/cpp/build.sh && ./backend/cpp/test_engine",
     "preview": "vite preview",
-    "clean": "rm -rf dist server.js",
-    "lint": "tsc --noEmit"
+    "clean": "rm -rf dist server.js backend/cpp/src/*.o",
+    "lint": "tsc --noEmit",
+    "db:init": "python3 backend/database.py"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.3.3",
@@ -21,6 +24,7 @@
     "motion": "^12.23.24",
     "react": "^19.0.1",
     "react-dom": "^19.0.1",
+    "tsx": "^4.21.0",
     "vite": "^8.3.0",
     "ws": "^8.22.0"
   },
@@ -32,8 +36,8 @@
     "@types/react-dom": "^19.3.0",
     "@types/ws": "^8.18.2",
     "autoprefixer": "^10.4.21",
+    "esbuild": "^0.25.0",
     "tailwindcss": "^4.3.3",
-    "tsx": "^4.21.0",
     "typescript": "^7.0.2"
   }
 }
