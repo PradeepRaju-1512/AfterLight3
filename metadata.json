@@ -1,8 +1,0 @@
-{
-  "name": "AFTERLIGHT",
-  "description": "A tactical Tic-Tac-Toe platform featuring intelligent bot difficulties, real-time WebSocket multiplayer, rankings, and player match history.",
-  "requestFramePermissions": [],
-  "majorCapabilities": [
-    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
-  ]
-}
