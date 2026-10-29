@@ -1,4 +1,49 @@
 #include "Board.hpp"
+#include <stdexcept>
+
+namespace afterlight {
+
+const std::array<std::array<int, 3>, 8> Board::WINNING_COMBINATIONS = {{
+    {0, 1, 2}, // Row 0
+    {3, 4, 5}, // Row 1
+    {6, 7, 8}, // Row 2
+    {0, 3, 6}, // Col 0
+    {1, 4, 7}, // Col 1
+    {2, 5, 8}, // Col 2
+    {0, 4, 8}, // Main diagonal
+    {2, 4, 6}  // Anti-diagonal
+}};
+
+Board::Board() {
+    m_grid.fill(Cell::EMPTY);
+}
+
+Board::Board(const std::array<Cell, 9>& initialState) : m_grid(initialState) {}
+
+Board::Board(const std::string& boardStr) {
+    m_grid.fill(Cell::EMPTY);
+    for (size_t i = 0; i < 9 && i < boardStr.size(); ++i) {
+        m_grid[i] = charToCell(boardStr[i]);
+    }
+}
+
+void Board::validatePosition(int position) const {
+    if (position < 0 || position > 8) {
+        throw PositionOutOfBoundsException(position);
+    }
+}
+
+Cell Board::getCell(int position) const {
+    validatePosition(position);
+    return m_grid[position];
+}
+
+std::array<Cell, 9> Board::getCells() const {
+    // Defensive copy
+    return m_grid;
+}
+
+std::string Board::toString() const {
     std::string s;
     s.reserve(9);
     for (Cell c : m_grid) {
@@ -104,4 +149,3 @@ std::ostream& operator<<(std::ostream& os, const Board& board) {
 }
 
 } // namespace afterlight
-
