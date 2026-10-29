@@ -1,9 +1,12 @@
+import 'dotenv/config';
 import express from 'express';
 import http from 'http';
 import { WebSocketServer, WebSocket } from 'ws';
 import path from 'path';
+import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { spawn } from 'child_process';
+import { randomUUID } from 'crypto';
 import { createServer as createViteServer } from 'vite';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -13,36 +16,59 @@ const app = express();
 const server = http.createServer(app);
 const wss = new WebSocketServer({ server, path: '/ws' });
 
-app.use(express.json());
+app.use(express.json({ limit: '100kb' }));
 
-const PORT = 3000;
+const PORT = Number(process.env.PORT) || 3000;
 
-// ==========================================
-// Python Bridge Helpers
-// ==========================================
+// Database & engine process runners
 
-function runPython(scriptPath: string, args: string[]): Promise<any> {
+const PROCESS_TIMEOUT_MS = 15000;
+
+// Spawns a child process and resolves with its parsed JSON stdout.
+// - 'error' events (binary missing, python3 not installed...) are handled; previously they were
+//   unhandled and crashed the whole Node server.
+// - a hung child is killed after PROCESS_TIMEOUT_MS.
+// - non-JSON output or a JSON { error } payload rejects instead of returning garbage that callers
+//   would then read `.move` / `.user` from.
+function runJsonProcess(label: string, command: string, args: string[]): Promise<any> {
   return new Promise((resolve, reject) => {
-    const py = spawn('python3', [scriptPath, ...args]);
+    let settled = false;
+    const finish = (fn: () => void) => { if (!settled) { settled = true; clearTimeout(timer); fn(); } };
+
+    const proc = spawn(command, args);
+    const timer = setTimeout(() => {
+      proc.kill('SIGKILL');
+      finish(() => reject(new Error(`${label} timed out after ${PROCESS_TIMEOUT_MS}ms`)));
+    }, PROCESS_TIMEOUT_MS);
+
     let stdout = '';
     let stderr = '';
+    proc.stdout.on('data', (d) => { stdout += d.toString(); });
+    proc.stderr.on('data', (d) => { stderr += d.toString(); });
 
-    py.stdout.on('data', (d) => { stdout += d.toString(); });
-    py.stderr.on('data', (d) => { stderr += d.toString(); });
+    proc.on('error', (err) => finish(() => reject(new Error(`${label} failed to start: ${err.message}`))));
 
-    py.on('close', (code) => {
-      if (code !== 0 && !stdout) {
-        return reject(new Error(stderr || `Python script exited with code ${code}`));
-      }
+    proc.on('close', (code) => finish(() => {
+      let parsed: any;
       try {
-        const parsed = JSON.parse(stdout.trim());
-        resolve(parsed);
-      } catch (err) {
-        // Return raw text if not json
-        resolve({ output: stdout, error: stderr, code });
+        parsed = JSON.parse(stdout.trim());
+      } catch {
+        return reject(new Error(stderr.trim() || `${label} exited with code ${code} and returned invalid JSON`));
       }
-    });
+      resolve(parsed);
+    }));
   });
+}
+
+function runPython(scriptPath: string, args: string[]): Promise<any> {
+  return runJsonProcess('Database bridge', process.env.PYTHON_BIN || 'python3', [scriptPath, ...args]);
+}
+
+// Engine calls: an { error } payload from the C++ CLI is a real failure -> reject.
+async function runCpp(binaryPath: string, args: string[]): Promise<any> {
+  const parsed = await runJsonProcess('C++ engine', binaryPath, args);
+  if (parsed && parsed.error) throw new Error(String(parsed.error));
+  return parsed;
 }
 
 function runDb(action: string, params: Record<string, any> = {}): Promise<any> {
@@ -51,8 +77,11 @@ function runDb(action: string, params: Record<string, any> = {}): Promise<any> {
 }
 
 function runEngineCli(command: string, args: string[] = []): Promise<any> {
-  const cli = path.join(__dirname, 'backend', 'engine_cli.py');
-  return runPython(cli, [command, ...args]);
+  const cppBinary = path.join(__dirname, 'backend', 'cpp', 'engine_cli');
+  if (!fs.existsSync(cppBinary)) {
+    return Promise.reject(new Error('Native C++ 17 engine binary not found at backend/cpp/engine_cli'));
+  }
+  return runCpp(cppBinary, [command, ...args]);
 }
 
 // ==========================================
@@ -88,8 +117,14 @@ app.post('/api/auth/login', async (req, res) => {
   }
 });
 
-app.post('/api/auth/logout', (_req, res) => {
-  res.json({ success: true });
+app.post('/api/auth/logout', async (req, res) => {
+  try {
+    const username = headerString(req.headers['x-username']);
+    if (username) await runDb('logout', { username });
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 app.get('/api/auth/me', async (req, res) => {
@@ -128,46 +163,102 @@ app.get('/api/players', async (req, res) => {
 });
 
 // --- BOT GAMES & ENGINE ---
+type Difficulty = 'wanderer' | 'sentinel' | 'unbroken';
+const DIFFICULTIES: Difficulty[] = ['wanderer', 'sentinel', 'unbroken'];
+
+function botDisplayName(diff: Difficulty): string {
+  return diff === 'wanderer' ? 'Wanderer' : diff === 'sentinel' ? 'Sentinel' : 'The Unbroken';
+}
+
+function headerString(v: string | string[] | undefined): string {
+  return (Array.isArray(v) ? v[0] : v) || '';
+}
+
+// Server-side authoritative state for bot games. Previously the server trusted the board sent by
+// the browser, so a client could submit a hand-made board to record fake wins.
+interface BotGameState {
+  id: string;
+  username: string;
+  humanMark: 'X' | 'O';
+  difficulty: Difficulty;
+  board: string;
+  createdAt: number;
+}
+const botGames = new Map<string, BotGameState>();
+const BOT_GAME_TTL_MS = 6 * 60 * 60 * 1000;
+
+function pruneBotGames() {
+  const cutoff = Date.now() - BOT_GAME_TTL_MS;
+  for (const [id, g] of botGames) {
+    if (g.createdAt < cutoff) botGames.delete(id);
+  }
+}
+
+function placeMark(board: string, pos: number, mark: string): string {
+  return board.substring(0, pos) + mark + board.substring(pos + 1);
+}
+
+async function saveBotResult(g: BotGameState, outcome: 'WIN_X' | 'WIN_O' | 'DRAW', line: number[] | null) {
+  const botName = botDisplayName(g.difficulty);
+  const humanWon = (outcome === 'WIN_X' && g.humanMark === 'X') || (outcome === 'WIN_O' && g.humanMark === 'O');
+  const winnerName = outcome === 'DRAW' ? null : humanWon ? g.username : botName;
+  await runDb('save_match', {
+    id: g.id,
+    mode: 'BOT',
+    botDifficulty: g.difficulty,
+    playerXName: g.humanMark === 'X' ? g.username : botName,
+    playerOName: g.humanMark === 'O' ? g.username : botName,
+    boardState: g.board,
+    currentTurn: g.humanMark,
+    status: 'COMPLETED',
+    outcome,
+    winnerName,
+    winningLine: line,
+  });
+  return winnerName;
+}
+
 app.post('/api/games/bot', async (req, res) => {
   try {
-    const { humanName, difficulty, humanMark } = req.body;
-    const gameId = 'game_' + Math.random().toString(36).substring(2, 9);
-    const mark = humanMark || 'X';
-    const diff = difficulty || 'unbroken';
-    const botName = diff === 'wanderer' ? 'Wanderer' : diff === 'sentinel' ? 'Sentinel' : 'The Unbroken';
-    const playerX = mark === 'X' ? humanName : botName;
-    const playerO = mark === 'O' ? humanName : botName;
+    const username = headerString(req.headers['x-username']) || String(req.body?.humanName || '');
+    if (!username) return res.status(401).json({ error: 'Unauthorized' });
+
+    const diff = (req.body?.difficulty || 'unbroken') as Difficulty;
+    const mark = (req.body?.humanMark || 'X') as 'X' | 'O';
+    if (!DIFFICULTIES.includes(diff)) return res.status(400).json({ error: 'Unknown difficulty.' });
+    if (mark !== 'X' && mark !== 'O') return res.status(400).json({ error: 'humanMark must be X or O.' });
+
+    pruneBotGames();
+    const gameId = 'game_' + randomUUID().replace(/-/g, '').slice(0, 12);
+    const botName = botDisplayName(diff);
 
     let board = '.........';
-    let currentTurn = 'X';
+    let currentTurn: 'X' | 'O' = 'X';
     let botFirstMove: any = null;
 
-    // If human selected O, bot moves first as X
+    // If the human chose O, the bot opens as X
     if (mark === 'O') {
-      const botMoveResult = await runEngineCli('bot-move', [board, diff, 'X']);
-      const pos = botMoveResult.move;
-      board = board.substring(0, pos) + 'X' + board.substring(pos + 1);
+      botFirstMove = await runEngineCli('bot-move', [board, diff, 'X']);
+      board = placeMark(board, botFirstMove.move, 'X');
       currentTurn = 'O';
-      botFirstMove = botMoveResult;
     }
 
-    const matchPayload = {
-      id: gameId,
-      mode: 'BOT',
-      botDifficulty: diff,
-      playerXName: playerX,
-      playerOName: playerO,
-      boardState: board,
-      currentTurn,
-      status: 'ACTIVE',
-      outcome: 'IN_PROGRESS',
-      createdAt: Date.now() / 1000,
-    };
+    botGames.set(gameId, { id: gameId, username, humanMark: mark, difficulty: diff, board, createdAt: Date.now() });
 
-    await runDb('save_match', matchPayload);
-
+    // Games are persisted when they finish (see saveBotResult); abandoned games leave no ghost rows.
     res.json({
-      game: matchPayload,
+      game: {
+        id: gameId,
+        mode: 'BOT',
+        botDifficulty: diff,
+        playerXName: mark === 'X' ? username : botName,
+        playerOName: mark === 'O' ? username : botName,
+        boardState: board,
+        currentTurn,
+        status: 'ACTIVE',
+        outcome: 'IN_PROGRESS',
+        createdAt: Date.now() / 1000,
+      },
       botFirstMove,
     });
   } catch (err: any) {
@@ -177,137 +268,82 @@ app.post('/api/games/bot', async (req, res) => {
 
 app.post('/api/games/bot/move', async (req, res) => {
   try {
-    const { gameId, board, position, humanMark, difficulty } = req.body;
-    const mark = humanMark || 'X';
-    const botMark = mark === 'X' ? 'O' : 'X';
-    const diff = difficulty || 'unbroken';
+    const username = headerString(req.headers['x-username']);
+    const { gameId } = req.body ?? {};
+    const position = Number(req.body?.position);
 
-    // 1. Validate position and apply human move
-    if (position < 0 || position > 8 || board[position] !== '.') {
+    const g = typeof gameId === 'string' ? botGames.get(gameId) : undefined;
+    if (!g) {
+      return res.status(404).json({ error: 'Game not found or expired. Please start a new game.' });
+    }
+    if (username && username !== g.username) {
+      return res.status(403).json({ error: 'This game belongs to another player.' });
+    }
+    if (!Number.isInteger(position) || position < 0 || position > 8 || g.board[position] !== '.') {
       return res.status(400).json({ error: 'Illegal move position.' });
     }
 
-    let currentBoard = board.substring(0, position) + mark + board.substring(position + 1);
+    const botMark = g.humanMark === 'X' ? 'O' : 'X';
+    const botName = botDisplayName(g.difficulty);
 
-    // Check if human won
-    const winCheck = checkWinner(currentBoard);
-    if (winCheck.winner) {
-      const matchUpdate = {
-        id: gameId,
-        mode: 'BOT',
-        botDifficulty: diff,
-        playerXName: mark === 'X' ? req.headers['x-username'] || 'Player' : diff,
-        playerOName: mark === 'O' ? req.headers['x-username'] || 'Player' : diff,
-        boardState: currentBoard,
-        currentTurn: mark,
-        status: 'COMPLETED',
-        outcome: mark === 'X' ? 'WIN_X' : 'WIN_O',
-        winnerName: req.headers['x-username'] || 'Player',
-        winningLine: winCheck.line,
-      };
-      await runDb('save_match', matchUpdate);
+    // 1. Human move
+    g.board = placeMark(g.board, position, g.humanMark);
+
+    const humanWin = checkWinner(g.board);
+    if (humanWin.winner) {
+      const winner = await saveBotResult(g, humanWin.winner === 'X' ? 'WIN_X' : 'WIN_O', humanWin.line);
+      botGames.delete(g.id);
       return res.json({
-        board: currentBoard,
-        status: 'COMPLETED',
-        outcome: matchUpdate.outcome,
-        winner: matchUpdate.winnerName,
-        winningLine: winCheck.line,
+        board: g.board, status: 'COMPLETED',
+        outcome: humanWin.winner === 'X' ? 'WIN_X' : 'WIN_O',
+        winner, winningLine: humanWin.line,
+      });
+    }
+    if (!g.board.includes('.')) {
+      await saveBotResult(g, 'DRAW', null);
+      botGames.delete(g.id);
+      return res.json({ board: g.board, status: 'COMPLETED', outcome: 'DRAW', winner: null, winningLine: null });
+    }
+
+    // 2. Bot reply (C++ engine)
+    let botResult: any;
+    try {
+      botResult = await runEngineCli('bot-move', [g.board, g.difficulty, botMark]);
+    } catch (engineErr) {
+      // Roll the human move back so the game is not left in a state the player cannot recover from
+      g.board = placeMark(g.board, position, '.');
+      throw engineErr;
+    }
+    const botPos = Number(botResult.move);
+    if (!Number.isInteger(botPos) || botPos < 0 || botPos > 8 || g.board[botPos] !== '.') {
+      g.board = placeMark(g.board, position, '.');
+      throw new Error('Engine returned an illegal move.');
+    }
+    g.board = placeMark(g.board, botPos, botMark);
+
+    const botWin = checkWinner(g.board);
+    if (botWin.winner) {
+      const outcome = botWin.winner === 'X' ? 'WIN_X' : 'WIN_O';
+      await saveBotResult(g, outcome, botWin.line);
+      botGames.delete(g.id);
+      return res.json({
+        board: g.board, status: 'COMPLETED', outcome,
+        winner: botName, winningLine: botWin.line,
+        botMove: botPos, botExplanation: botResult.explanation,
+      });
+    }
+    if (!g.board.includes('.')) {
+      await saveBotResult(g, 'DRAW', null);
+      botGames.delete(g.id);
+      return res.json({
+        board: g.board, status: 'COMPLETED', outcome: 'DRAW', winner: null, winningLine: null,
+        botMove: botPos, botExplanation: botResult.explanation,
       });
     }
 
-    // Check if draw
-    if (!currentBoard.includes('.')) {
-      const matchUpdate = {
-        id: gameId,
-        mode: 'BOT',
-        botDifficulty: diff,
-        playerXName: mark === 'X' ? req.headers['x-username'] || 'Player' : diff,
-        playerOName: mark === 'O' ? req.headers['x-username'] || 'Player' : diff,
-        boardState: currentBoard,
-        currentTurn: botMark,
-        status: 'COMPLETED',
-        outcome: 'DRAW',
-        winnerName: null,
-        winningLine: null,
-      };
-      await runDb('save_match', matchUpdate);
-      return res.json({
-        board: currentBoard,
-        status: 'COMPLETED',
-        outcome: 'DRAW',
-        winner: null,
-        winningLine: null,
-      });
-    }
-
-    // 2. Execute Python bot decision
-    const botResult = await runEngineCli('bot-move', [currentBoard, diff, botMark]);
-    const botPos = botResult.move;
-    currentBoard = currentBoard.substring(0, botPos) + botMark + currentBoard.substring(botPos + 1);
-
-    // Check if bot won
-    const botWinCheck = checkWinner(currentBoard);
-    if (botWinCheck.winner) {
-      const botName = diff === 'wanderer' ? 'Wanderer' : diff === 'sentinel' ? 'Sentinel' : 'The Unbroken';
-      const matchUpdate = {
-        id: gameId,
-        mode: 'BOT',
-        botDifficulty: diff,
-        playerXName: mark === 'X' ? req.headers['x-username'] || 'Player' : botName,
-        playerOName: mark === 'O' ? req.headers['x-username'] || 'Player' : botName,
-        boardState: currentBoard,
-        currentTurn: botMark,
-        status: 'COMPLETED',
-        outcome: botMark === 'X' ? 'WIN_X' : 'WIN_O',
-        winnerName: botName,
-        winningLine: botWinCheck.line,
-      };
-      await runDb('save_match', matchUpdate);
-      return res.json({
-        board: currentBoard,
-        status: 'COMPLETED',
-        outcome: matchUpdate.outcome,
-        winner: botName,
-        winningLine: botWinCheck.line,
-        botMove: botPos,
-        botExplanation: botResult.explanation,
-      });
-    }
-
-    // Check if draw after bot move
-    if (!currentBoard.includes('.')) {
-      const matchUpdate = {
-        id: gameId,
-        mode: 'BOT',
-        botDifficulty: diff,
-        playerXName: mark === 'X' ? req.headers['x-username'] || 'Player' : diff,
-        playerOName: mark === 'O' ? req.headers['x-username'] || 'Player' : diff,
-        boardState: currentBoard,
-        currentTurn: mark,
-        status: 'COMPLETED',
-        outcome: 'DRAW',
-        winnerName: null,
-        winningLine: null,
-      };
-      await runDb('save_match', matchUpdate);
-      return res.json({
-        board: currentBoard,
-        status: 'COMPLETED',
-        outcome: 'DRAW',
-        winner: null,
-        winningLine: null,
-        botMove: botPos,
-        botExplanation: botResult.explanation,
-      });
-    }
-
-    // Match remains active
     res.json({
-      board: currentBoard,
-      status: 'ACTIVE',
-      nextTurn: mark,
-      botMove: botPos,
-      botExplanation: botResult.explanation,
+      board: g.board, status: 'ACTIVE', nextTurn: g.humanMark,
+      botMove: botPos, botExplanation: botResult.explanation,
     });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -316,7 +352,8 @@ app.post('/api/games/bot/move', async (req, res) => {
 
 app.get('/api/games/history', async (req, res) => {
   try {
-    const username = (req.query.username as string) || '';
+    const username = headerString(req.headers['x-username']) || (req.query.username as string) || '';
+    if (!username) return res.status(401).json({ error: 'Unauthorized' });
     const result = await runDb('get_match_history', { username });
     res.json(result);
   } catch (err: any) {
@@ -338,8 +375,10 @@ app.get('/api/social/overview', async (req, res) => {
 
 app.post('/api/friend-requests', async (req, res) => {
   try {
-    const senderName = req.headers['x-username'] as string;
-    const { recipientName } = req.body;
+    const senderName = headerString(req.headers['x-username']);
+    if (!senderName) return res.status(401).json({ error: 'Unauthorized' });
+    const { recipientName } = req.body ?? {};
+    if (!recipientName) return res.status(400).json({ error: 'recipientName is required.' });
     const result = await runDb('send_friend_request', { senderName, recipientName });
     if (result.error) return res.status(400).json(result);
     res.json(result);
@@ -350,9 +389,12 @@ app.post('/api/friend-requests', async (req, res) => {
 
 app.post('/api/friend-requests/:id/respond', async (req, res) => {
   try {
+    const username = headerString(req.headers['x-username']);
+    if (!username) return res.status(401).json({ error: 'Unauthorized' });
     const requestId = req.params.id;
-    const { status } = req.body;
-    const result = await runDb('respond_friend_request', { requestId, status });
+    const { status } = req.body ?? {};
+    const result = await runDb('respond_friend_request', { requestId, status, username });
+    if (result.error) return res.status(400).json(result);
     res.json(result);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -361,7 +403,8 @@ app.post('/api/friend-requests/:id/respond', async (req, res) => {
 
 app.delete('/api/friends/:friendName', async (req, res) => {
   try {
-    const userA = req.headers['x-username'] as string;
+    const userA = headerString(req.headers['x-username']);
+    if (!userA) return res.status(401).json({ error: 'Unauthorized' });
     const userB = req.params.friendName;
     const result = await runDb('remove_friend', { userA, userB });
     res.json(result);
@@ -372,7 +415,8 @@ app.delete('/api/friends/:friendName', async (req, res) => {
 
 app.post('/api/users/:targetUser/block', async (req, res) => {
   try {
-    const blocker = req.headers['x-username'] as string;
+    const blocker = headerString(req.headers['x-username']);
+    if (!blocker) return res.status(401).json({ error: 'Unauthorized' });
     const blocked = req.params.targetUser;
     const result = await runDb('block_user', { blocker, blocked });
     res.json(result);
@@ -383,7 +427,8 @@ app.post('/api/users/:targetUser/block', async (req, res) => {
 
 app.post('/api/users/:targetUser/unblock', async (req, res) => {
   try {
-    const blocker = req.headers['x-username'] as string;
+    const blocker = headerString(req.headers['x-username']);
+    if (!blocker) return res.status(401).json({ error: 'Unauthorized' });
     const blocked = req.params.targetUser;
     const result = await runDb('unblock_user', { blocker, blocked });
     res.json(result);
@@ -394,9 +439,12 @@ app.post('/api/users/:targetUser/unblock', async (req, res) => {
 
 app.post('/api/invitations', async (req, res) => {
   try {
-    const senderName = req.headers['x-username'] as string;
-    const { recipientName, roomCode } = req.body;
+    const senderName = headerString(req.headers['x-username']);
+    if (!senderName) return res.status(401).json({ error: 'Unauthorized' });
+    const { recipientName, roomCode } = req.body ?? {};
+    if (!recipientName || !roomCode) return res.status(400).json({ error: 'recipientName and roomCode are required.' });
     const result = await runDb('send_game_invitation', { senderName, recipientName, roomCode });
+    if (result.error) return res.status(400).json(result);
     res.json(result);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -405,7 +453,8 @@ app.post('/api/invitations', async (req, res) => {
 
 app.get('/api/invitations', async (req, res) => {
   try {
-    const username = req.headers['x-username'] as string;
+    const username = headerString(req.headers['x-username']);
+    if (!username) return res.status(401).json({ error: 'Unauthorized' });
     const result = await runDb('get_invitations', { username });
     res.json(result);
   } catch (err: any) {
@@ -415,7 +464,9 @@ app.get('/api/invitations', async (req, res) => {
 
 app.post('/api/notifications/:id/read', async (req, res) => {
   try {
-    const result = await runDb('read_notification', { notificationId: req.params.id });
+    const username = headerString(req.headers['x-username']);
+    if (!username) return res.status(401).json({ error: 'Unauthorized' });
+    const result = await runDb('read_notification', { notificationId: req.params.id, username });
     res.json(result);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
@@ -424,15 +475,18 @@ app.post('/api/notifications/:id/read', async (req, res) => {
 
 app.post('/api/notifications/read-all', async (req, res) => {
   try {
-    const username = req.headers['x-username'] as string;
+    const username = headerString(req.headers['x-username']);
+    if (!username) return res.status(401).json({ error: 'Unauthorized' });
     const result = await runDb('read_all_notifications', { username });
     res.json(result);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
 });
+// ==========================================
+// C++ OOP Lab Endpoints
+// ==========================================
 
-// --- DEDICATED OOP LAB ENDPOINTS ---
 app.post('/api/oop/polymorphism-demo', async (req, res) => {
   try {
     const { board, mark } = req.body;
@@ -458,6 +512,29 @@ app.post('/api/oop/encapsulation-demo', async (req, res) => {
   }
 });
 
+app.post('/api/oop/operators-demo', async (req, res) => {
+  try {
+    const { board, position, mark } = req.body;
+    const result = await runEngineCli('test-operators', [
+      board || 'X.O......',
+      String(position ?? 1),
+      mark || 'X',
+    ]);
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/oop/templates-demo', async (_req, res) => {
+  try {
+    const result = await runEngineCli('test-templates');
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.get('/api/oop/class-registry', async (_req, res) => {
   try {
     const result = await runEngineCli('class-registry');
@@ -467,29 +544,43 @@ app.get('/api/oop/class-registry', async (_req, res) => {
   }
 });
 
-app.post('/api/oop/run-tests', async (_req, res) => {
-  try {
-    const testScript = path.join(__dirname, 'backend', 'tests', 'test_engine.py');
-    const py = spawn('python3', [testScript]);
-    let output = '';
-    let errOutput = '';
-
-    py.stdout.on('data', (d) => { output += d.toString(); });
-    py.stderr.on('data', (d) => { errOutput += d.toString(); });
-
-    py.on('close', (code) => {
-      const combined = output + '\n' + errOutput;
-      const passed = code === 0 && combined.includes('OK');
-      res.json({
-        success: passed,
-        exitCode: code,
-        output: combined,
-        summary: passed ? 'All 20 Python OOP domain & AI correctness tests passed!' : 'Tests failed.',
-      });
-    });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
+app.post('/api/oop/run-tests', (_req, res) => {
+  const cppTest = path.join(__dirname, 'backend', 'cpp', 'test_engine');
+  if (!fs.existsSync(cppTest)) {
+    return res.status(500).json({ error: 'C++ test binary not found. Run: bash backend/cpp/build.sh' });
   }
+
+  let responded = false;
+  const reply = (status: number, body: any) => {
+    if (responded) return;
+    responded = true;
+    res.status(status).json(body);
+  };
+
+  const proc = spawn(cppTest);
+  let output = '';
+  let errOutput = '';
+  const timer = setTimeout(() => { proc.kill('SIGKILL'); reply(500, { error: 'C++ tests timed out.' }); }, 60000);
+
+  proc.stdout.on('data', (d) => { output += d.toString(); });
+  proc.stderr.on('data', (d) => { errOutput += d.toString(); });
+  proc.on('error', (err) => { clearTimeout(timer); reply(500, { error: `Could not start C++ tests: ${err.message}` }); });
+  proc.on('close', (code) => {
+    clearTimeout(timer);
+    const combined = output + (errOutput ? '\n' + errOutput : '');
+    const passed = code === 0;
+    const m = combined.match(/Total Passed: (\d+) \/ (\d+)/);
+    const count = m ? m[2] : '';
+    reply(200, {
+      engine: 'C++ 17 Native ISO Engine',
+      success: passed,
+      exitCode: code,
+      output: combined,
+      summary: passed
+        ? `All ${count} C++ OOP domain, operator overloading & template tests passed! (100% OK)`
+        : 'C++ Tests failed.',
+    });
+  });
 });
 
 // ==========================================
@@ -540,6 +631,77 @@ function checkWinner(b: string): { winner: 'X' | 'O' | null; line: number[] | nu
   return { winner: null, line: null };
 }
 
+const ROOM_CODE_RE = /^[A-Z0-9-]{3,20}$/;
+
+function roomSnapshot(room: GameRoom) {
+  return {
+    status: room.status,
+    players: room.players.map(p => ({ username: p.username, mark: p.mark })),
+    board: room.board,
+    currentTurn: room.currentTurn,
+  };
+}
+
+// Persists a finished online match. A DB failure must never leave the room stuck, so it is logged only.
+async function persistRoomResult(room: GameRoom, outcome: string, winnerName: string | null, line: number[] | null) {
+  const px = room.players.find(p => p.mark === 'X')?.username || 'PlayerX';
+  const po = room.players.find(p => p.mark === 'O')?.username || 'PlayerO';
+  try {
+    await runDb('save_match', {
+      id: 'room_' + room.code + '_' + Date.now(),
+      mode: 'ONLINE',
+      playerXName: px,
+      playerOName: po,
+      boardState: room.board,
+      currentTurn: room.currentTurn,
+      status: 'COMPLETED',
+      outcome,
+      winnerName,
+      winningLine: line,
+      roomCode: room.code,
+    });
+  } catch (e: any) {
+    console.error('Failed to save online match:', e.message);
+  }
+}
+
+// Removes a socket from its room. Only real seat-holders trigger PLAYER_LEFT / room cleanup
+// (a rejected third connection used to be able to do this).
+function removeFromRoom(code: string | null, ws: WebSocket) {
+  if (!code) return;
+  const room = rooms.get(code);
+  if (!room) return;
+  const leaving = room.players.find(p => p.ws === ws);
+  if (!leaving) return;
+
+  room.players = room.players.filter(p => p.ws !== ws);
+  room.rematchVotes.delete(leaving.username);
+
+  if (room.players.length === 0) {
+    rooms.delete(code);
+    return;
+  }
+
+  // A finished game cannot be rematched with one player: reset so the next joiner starts fresh.
+  if (room.status === 'COMPLETED') {
+    room.status = 'WAITING';
+    room.board = '.........';
+    room.currentTurn = 'X';
+    room.outcome = undefined;
+    room.winner = undefined;
+    room.winningLine = null;
+    room.rematchVotes.clear();
+  }
+  broadcastRoom(room, 'PLAYER_LEFT', { username: leaving.username });
+  broadcastRoom(room, 'ROOM_STATE', roomSnapshot(room));
+}
+
+function sendError(ws: WebSocket, message: string) {
+  if (ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({ event: 'ERROR', payload: { message } }));
+  }
+}
+
 wss.on('connection', (ws) => {
   let currentRoomCode: string | null = null;
   let currentUser: string | null = null;
@@ -550,13 +712,19 @@ wss.on('connection', (ws) => {
       const { action, roomCode, username, position, text } = message;
 
       if (action === 'JOIN_ROOM') {
-        const code = roomCode.toUpperCase().trim();
-        currentUser = username;
-        currentRoomCode = code;
+        const code = String(roomCode ?? '').toUpperCase().trim();
+        const name = String(username ?? '').trim();
+        if (!ROOM_CODE_RE.test(code)) return sendError(ws, 'Invalid room code.');
+        if (!name || name.length > 40) return sendError(ws, 'Invalid username.');
+
+        // Switching rooms on the same socket: leave the old one first
+        if (currentRoomCode && currentRoomCode !== code) {
+          removeFromRoom(currentRoomCode, ws);
+          currentRoomCode = null;
+        }
 
         let room = rooms.get(code);
         if (!room) {
-          // Create new room
           room = {
             code,
             players: [],
@@ -569,19 +737,23 @@ wss.on('connection', (ws) => {
           rooms.set(code, room);
         }
 
-        // Check if player already in room
-        const existingIdx = room.players.findIndex(p => p.username === username);
-        if (existingIdx !== -1) {
-          room.players[existingIdx].ws = ws;
+        const existing = room.players.find(p => p.username === name);
+        if (existing) {
+          existing.ws = ws; // reconnect (page reload / second tab)
         } else if (room.players.length < 2) {
-          const mark = room.players.length === 0 ? 'X' : 'O';
-          room.players.push({ ws, username, mark });
+          // Take whichever mark is free. Using players.length gave two players the same mark
+          // when one had left an ongoing game.
+          const taken = room.players[0]?.mark;
+          const mark: 'X' | 'O' = taken === 'X' ? 'O' : 'X';
+          room.players.push({ ws, username: name, mark });
         } else {
-          ws.send(JSON.stringify({ event: 'ERROR', payload: { message: 'Room is full.' } }));
-          return;
+          return sendError(ws, 'Room is full.');
         }
 
-        // If 2 players, start game!
+        // Only now is this socket actually a member of the room
+        currentRoomCode = code;
+        currentUser = name;
+
         if (room.players.length === 2 && room.status === 'WAITING') {
           room.status = 'ACTIVE';
           broadcastRoom(room, 'GAME_START', {
@@ -591,12 +763,7 @@ wss.on('connection', (ws) => {
             playerO: room.players.find(p => p.mark === 'O')?.username,
           });
         } else {
-          broadcastRoom(room, 'ROOM_STATE', {
-            status: room.status,
-            players: room.players.map(p => ({ username: p.username, mark: p.mark })),
-            board: room.board,
-            currentTurn: room.currentTurn,
-          });
+          broadcastRoom(room, 'ROOM_STATE', roomSnapshot(room));
         }
       }
 
@@ -607,104 +774,57 @@ wss.on('connection', (ws) => {
 
         const player = room.players.find(p => p.username === currentUser);
         if (!player || player.mark !== room.currentTurn) {
-          ws.send(JSON.stringify({ event: 'ERROR', payload: { message: 'Not your turn!' } }));
-          return;
+          return sendError(ws, 'Not your turn!');
+        }
+        if (room.players.length < 2) {
+          return sendError(ws, 'Waiting for an opponent to return.');
         }
 
         const pos = Number(position);
-        if (pos < 0 || pos > 8 || room.board[pos] !== '.') {
-          ws.send(JSON.stringify({ event: 'ERROR', payload: { message: 'Illegal position!' } }));
-          return;
+        if (!Number.isInteger(pos) || pos < 0 || pos > 8 || room.board[pos] !== '.') {
+          return sendError(ws, 'Illegal position!');
         }
 
-        // Apply move
         room.board = room.board.substring(0, pos) + player.mark + room.board.substring(pos + 1);
 
-        // Check winner
         const win = checkWinner(room.board);
         if (win.winner) {
           room.status = 'COMPLETED';
           room.outcome = win.winner === 'X' ? 'WIN_X' : 'WIN_O';
           room.winner = player.username;
           room.winningLine = win.line;
-
-          // Save to database
-          const px = room.players.find(p => p.mark === 'X')?.username || 'PlayerX';
-          const po = room.players.find(p => p.mark === 'O')?.username || 'PlayerO';
-          await runDb('save_match', {
-            id: 'room_' + room.code + '_' + Date.now(),
-            mode: 'ONLINE',
-            playerXName: px,
-            playerOName: po,
-            boardState: room.board,
-            currentTurn: room.currentTurn,
-            status: 'COMPLETED',
-            outcome: room.outcome,
-            winnerName: player.username,
-            winningLine: win.line,
-            roomCode: room.code,
-          });
-
           broadcastRoom(room, 'GAME_OVER', {
-            board: room.board,
-            outcome: room.outcome,
-            winner: player.username,
-            winningLine: win.line,
+            board: room.board, outcome: room.outcome, winner: player.username, winningLine: win.line,
           });
+          await persistRoomResult(room, room.outcome, player.username, win.line);
           return;
         }
 
-        // Check draw
         if (!room.board.includes('.')) {
           room.status = 'COMPLETED';
           room.outcome = 'DRAW';
           room.winner = null;
           room.winningLine = null;
-
-          const px = room.players.find(p => p.mark === 'X')?.username || 'PlayerX';
-          const po = room.players.find(p => p.mark === 'O')?.username || 'PlayerO';
-          await runDb('save_match', {
-            id: 'room_' + room.code + '_' + Date.now(),
-            mode: 'ONLINE',
-            playerXName: px,
-            playerOName: po,
-            boardState: room.board,
-            currentTurn: room.currentTurn,
-            status: 'COMPLETED',
-            outcome: 'DRAW',
-            winnerName: null,
-            winningLine: null,
-            roomCode: room.code,
-          });
-
-          broadcastRoom(room, 'GAME_OVER', {
-            board: room.board,
-            outcome: 'DRAW',
-            winner: null,
-            winningLine: null,
-          });
+          broadcastRoom(room, 'GAME_OVER', { board: room.board, outcome: 'DRAW', winner: null, winningLine: null });
+          await persistRoomResult(room, 'DRAW', null, null);
           return;
         }
 
-        // Next turn
         room.currentTurn = room.currentTurn === 'X' ? 'O' : 'X';
         broadcastRoom(room, 'MOVE_MADE', {
-          position: pos,
-          mark: player.mark,
-          player: player.username,
-          board: room.board,
-          nextTurn: room.currentTurn,
+          position: pos, mark: player.mark, player: player.username, board: room.board, nextTurn: room.currentTurn,
         });
       }
 
       else if (action === 'REQUEST_REMATCH') {
-        if (!currentRoomCode) return;
+        if (!currentRoomCode || !currentUser) return;
         const room = rooms.get(currentRoomCode);
-        if (!room) return;
+        // Previously a rematch could be forced in the middle of a running game
+        if (!room || room.status !== 'COMPLETED' || room.players.length < 2) return;
+        if (!room.players.some(p => p.username === currentUser)) return;
 
-        room.rematchVotes.add(currentUser!);
+        room.rematchVotes.add(currentUser);
         if (room.rematchVotes.size >= 2) {
-          // Reset board, swap marks for fair play
           room.board = '.........';
           room.status = 'ACTIVE';
           room.currentTurn = 'X';
@@ -713,10 +833,8 @@ wss.on('connection', (ws) => {
           room.winner = undefined;
           room.winningLine = null;
 
-          // Swap marks
-          room.players.forEach(p => {
-            p.mark = p.mark === 'X' ? 'O' : 'X';
-          });
+          // Swap marks for fairness
+          room.players.forEach(p => { p.mark = p.mark === 'X' ? 'O' : 'X'; });
 
           broadcastRoom(room, 'REMATCH_STARTED', {
             board: room.board,
@@ -732,41 +850,30 @@ wss.on('connection', (ws) => {
       else if (action === 'CHAT') {
         if (!currentRoomCode) return;
         const room = rooms.get(currentRoomCode);
-        if (!room) return;
-        const msgObj = { sender: currentUser || 'Anonymous', text: String(text || '').slice(0, 150), time: Date.now() };
+        if (!room || !room.players.some(p => p.ws === ws)) return;
+        const clean = String(text ?? '').trim().slice(0, 150);
+        if (!clean) return;
+        const msgObj = { sender: currentUser || 'Anonymous', text: clean, time: Date.now() };
         room.chat.push(msgObj);
+        if (room.chat.length > 200) room.chat.shift(); // bound memory
         broadcastRoom(room, 'CHAT_MESSAGE', msgObj);
       }
 
       else if (action === 'LEAVE_ROOM') {
-        if (!currentRoomCode) return;
-        const room = rooms.get(currentRoomCode);
-        if (room) {
-          room.players = room.players.filter(p => p.username !== currentUser);
-          broadcastRoom(room, 'PLAYER_LEFT', { username: currentUser });
-          if (room.players.length === 0) {
-            rooms.delete(currentRoomCode);
-          }
-        }
+        removeFromRoom(currentRoomCode, ws);
         currentRoomCode = null;
       }
     } catch (e: any) {
-      ws.send(JSON.stringify({ event: 'ERROR', payload: { message: e.message } }));
+      sendError(ws, e.message);
     }
   });
 
   ws.on('close', () => {
-    if (currentRoomCode) {
-      const room = rooms.get(currentRoomCode);
-      if (room) {
-        room.players = room.players.filter(p => p.ws !== ws);
-        broadcastRoom(room, 'PLAYER_LEFT', { username: currentUser });
-        if (room.players.length === 0) {
-          rooms.delete(currentRoomCode);
-        }
-      }
-    }
+    removeFromRoom(currentRoomCode, ws);
+    currentRoomCode = null;
   });
+
+  ws.on('error', (err) => console.error('WebSocket error:', err.message));
 });
 
 // ==========================================
@@ -788,6 +895,12 @@ async function startServer() {
       res.sendFile(path.join(__dirname, 'dist', 'index.html'));
     });
   }
+
+  // JSON error responses (e.g. malformed request bodies) instead of Express' default HTML page
+  app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+    const status = err?.status || err?.statusCode || 500;
+    res.status(status).json({ error: status === 500 ? 'Internal server error.' : err.message });
+  });
 
   server.listen(PORT, '0.0.0.0', () => {
     console.log(`AFTERLIGHT Server running on http://0.0.0.0:${PORT}`);
