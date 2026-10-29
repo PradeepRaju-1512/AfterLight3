@@ -3,7 +3,10 @@ import {
   PlayerPublicProfile,
   MatchRecord,
   NotificationItem,
-  PolymorphismResultItem
+  PolymorphismResultItem,
+  OperatorOverloadResult,
+  TemplatesResult,
+  ClassRegistryItem,
 } from '../types';
 
 let currentUserState: User | null = null;
@@ -29,6 +32,21 @@ export function setStoredUser(user: User | null) {
   } else {
     localStorage.removeItem('afterlight_user');
   }
+}
+
+// Parses a response and throws the server's error message on non-2xx replies, so callers'
+// existing try/catch blocks actually fire (previously error JSON was silently treated as success).
+async function handle(res: Response) {
+  let data: any = null;
+  try {
+    data = await res.json();
+  } catch {
+    /* empty or non-JSON body */
+  }
+  if (!res.ok) {
+    throw new Error((data && data.error) || `Request failed (${res.status})`);
+  }
+  return data;
 }
 
 function getHeaders(): HeadersInit {
@@ -63,9 +81,18 @@ export const api = {
     return res.json();
   },
 
+  async logout() {
+    // Must run while the stored user's headers are still available
+    try {
+      await fetch('/api/auth/logout', { method: 'POST', headers: getHeaders() });
+    } catch {
+      /* logging out locally must not depend on the network */
+    }
+  },
+
   async getMe() {
     const res = await fetch('/api/auth/me', { headers: getHeaders() });
-    return res.json();
+    return handle(res);
   },
 
   async updateProfile(params: { displayName?: string; bio?: string; avatar?: string }) {
@@ -74,13 +101,13 @@ export const api = {
       headers: getHeaders(),
       body: JSON.stringify(params),
     });
-    return res.json();
+    return handle(res);
   },
 
   // Players
   async searchPlayers(query = ''): Promise<{ players: PlayerPublicProfile[] }> {
     const res = await fetch(`/api/players?q=${encodeURIComponent(query)}`, { headers: getHeaders() });
-    return res.json();
+    return handle(res);
   },
 
   // Games
@@ -90,7 +117,7 @@ export const api = {
       headers: getHeaders(),
       body: JSON.stringify(params),
     });
-    return res.json();
+    return handle(res);
   },
 
   async playBotMove(params: {
@@ -105,18 +132,18 @@ export const api = {
       headers: getHeaders(),
       body: JSON.stringify(params),
     });
-    return res.json();
+    return handle(res);
   },
 
   async getMatchHistory(username = ''): Promise<{ games: MatchRecord[] }> {
     const res = await fetch(`/api/games/history?username=${encodeURIComponent(username)}`, { headers: getHeaders() });
-    return res.json();
+    return handle(res);
   },
 
   // Social
   async getSocialOverview() {
     const res = await fetch('/api/social/overview', { headers: getHeaders() });
-    return res.json();
+    return handle(res);
   },
 
   async sendFriendRequest(recipientName: string) {
@@ -125,7 +152,7 @@ export const api = {
       headers: getHeaders(),
       body: JSON.stringify({ recipientName }),
     });
-    return res.json();
+    return handle(res);
   },
 
   async respondFriendRequest(requestId: string, status: 'ACCEPTED' | 'REJECTED' | 'CANCELLED') {
@@ -134,7 +161,7 @@ export const api = {
       headers: getHeaders(),
       body: JSON.stringify({ status }),
     });
-    return res.json();
+    return handle(res);
   },
 
   async removeFriend(friendName: string) {
@@ -142,7 +169,7 @@ export const api = {
       method: 'DELETE',
       headers: getHeaders(),
     });
-    return res.json();
+    return handle(res);
   },
 
   async blockUser(targetUser: string) {
@@ -150,7 +177,7 @@ export const api = {
       method: 'POST',
       headers: getHeaders(),
     });
-    return res.json();
+    return handle(res);
   },
 
   async unblockUser(targetUser: string) {
@@ -158,7 +185,7 @@ export const api = {
       method: 'POST',
       headers: getHeaders(),
     });
-    return res.json();
+    return handle(res);
   },
 
   async sendInvitation(recipientName: string, roomCode: string) {
@@ -167,12 +194,12 @@ export const api = {
       headers: getHeaders(),
       body: JSON.stringify({ recipientName, roomCode }),
     });
-    return res.json();
+    return handle(res);
   },
 
   async getInvitations() {
     const res = await fetch('/api/invitations', { headers: getHeaders() });
-    return res.json();
+    return handle(res);
   },
 
   async readNotification(id: string) {
@@ -180,7 +207,7 @@ export const api = {
       method: 'POST',
       headers: getHeaders(),
     });
-    return res.json();
+    return handle(res);
   },
 
   async readAllNotifications() {
@@ -188,10 +215,10 @@ export const api = {
       method: 'POST',
       headers: getHeaders(),
     });
-    return res.json();
+    return handle(res);
   },
 
-  // OOP Lab
+  // OOP Lab: C++ OOP Demonstrations
   async getPolymorphismDemo(board = 'X.O......', mark = 'O'): Promise<{
     inputBoard: string;
     botMark: string;
@@ -203,7 +230,7 @@ export const api = {
       headers: getHeaders(),
       body: JSON.stringify({ board, mark }),
     });
-    return res.json();
+    return handle(res);
   },
 
   async getEncapsulationDemo(action = 'occupied_cell', board = 'X........', position = 0, mark = 'O') {
@@ -212,12 +239,28 @@ export const api = {
       headers: getHeaders(),
       body: JSON.stringify({ action, board, position, mark }),
     });
-    return res.json();
+    return handle(res);
   },
 
-  async getClassRegistry() {
+  async getOperatorsDemo(board = 'X.O......', position = 1, mark = 'X'): Promise<OperatorOverloadResult> {
+    const res = await fetch('/api/oop/operators-demo', {
+      method: 'POST',
+      headers: getHeaders(),
+      body: JSON.stringify({ board, position, mark }),
+    });
+    return handle(res);
+  },
+
+  async getTemplatesDemo(): Promise<TemplatesResult> {
+    const res = await fetch('/api/oop/templates-demo', {
+      headers: getHeaders(),
+    });
+    return handle(res);
+  },
+
+  async getClassRegistry(): Promise<{ engine: string; classes: ClassRegistryItem[] }> {
     const res = await fetch('/api/oop/class-registry', { headers: getHeaders() });
-    return res.json();
+    return handle(res);
   },
 
   async runOopTests() {
@@ -225,6 +268,6 @@ export const api = {
       method: 'POST',
       headers: getHeaders(),
     });
-    return res.json();
+    return handle(res);
   },
 };
