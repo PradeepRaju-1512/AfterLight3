@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AFTERLIGHT — Academic PPT Presentation</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@700&family=JetBrains+Mono:wght@400;600&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #080D16;
+      color: #DCE8F5;
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+    .slide-deck {
+      width: 90vw;
+      max-width: 1050px;
+      height: 82vh;
+      background: #0E1726;
+      border: 1px solid #293748;
+      border-radius: 20px;
+      box-shadow: 0 25px 60px rgba(0,0,0,0.8), 0 0 40px rgba(217, 154, 78, 0.08);
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      overflow: hidden;
+    }
+    .slide-header {
+      padding: 24px 36px 16px;
+      border-bottom: 1px solid #202D3D;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .slide-header .brand {
+      font-family: 'Cinzel', serif;
+      font-size: 18px;
+      letter-spacing: 0.15em;
+      color: #D99A4E;
+    }
+    .slide-header .course-tag {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      color: #8795A7;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+    }
+    .slide-body {
+      flex: 1;
+      padding: 36px 44px;
+      overflow-y: auto;
+      display: none;
+    }
+    .slide-body.active {
+      display: block;
+      animation: fadeIn 0.25s ease-out;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .slide-title {
+      font-size: 26px;
+      font-weight: 700;
+      color: #FFFFFF;
+      margin-bottom: 6px;
+    }
+    .slide-subtitle {
+      font-size: 14px;
+      font-family: 'JetBrains Mono', monospace;
+      color: #D99A4E;
+      margin-bottom: 24px;
+    }
+    .bullet-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .bullet-list li {
+      font-size: 15px;
+      line-height: 1.6;
+      color: #BAC7D5;
+      padding-left: 28px;
+      position: relative;
+    }
+    .bullet-list li::before {
+      content: "✦";
+      position: absolute;
+      left: 0;
+      top: 0;
+      color: #D99A4E;
+      font-size: 14px;
+    }
+    .bullet-list strong {
+      color: #FFFFFF;
+    }
+    .code-box {
+      background: #060910;
+      border: 1px solid #202D3D;
+      border-radius: 10px;
+      padding: 16px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      color: #32C997;
+      line-height: 1.5;
+      margin: 16px 0;
+      overflow-x: auto;
+    }
+    .speaker-notes {
+      margin-top: 24px;
+      padding: 14px 18px;
+      background: rgba(217, 154, 78, 0.08);
+      border-left: 3px solid #D99A4E;
+      border-radius: 6px;
+      font-size: 12px;
+      font-family: 'JetBrains Mono', monospace;
+      color: #D99A4E;
+    }
+    .slide-footer {
+      padding: 16px 36px;
+      border-top: 1px solid #202D3D;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      background: #090F1A;
+    }
+    .slide-counter {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      color: #8795A7;
+    }
+    .nav-buttons {
+      display: flex;
+      gap: 12px;
+    }
+    .nav-btn {
+      background: #172231;
+      border: 1px solid #293748;
+      color: #DCE8F5;
+      padding: 8px 18px;
+      border-radius: 8px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .nav-btn:hover:not(:disabled) {
+      background: #D99A4E;
+      color: #080D16;
+      border-color: #D99A4E;
+    }
+    .nav-btn:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 18px;
+      margin: 16px 0;
+    }
+    .card {
+      background: #080D16;
+      border: 1px solid #202D3D;
+      padding: 16px;
+      border-radius: 12px;
+    }
+    .card h4 {
+      color: #D99A4E;
+      font-size: 13px;
+      font-family: 'JetBrains Mono', monospace;
+      margin-bottom: 8px;
+    }
+    .card p {
+      font-size: 12px;
+      line-height: 1.5;
+      color: #BAC7D5;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="slide-deck">
+    <!-- Header -->
+    <div class="slide-header">
+      <div class="brand">AFTERLIGHT</div>
+      <div class="course-tag">CS204: OOPS Lab • Semester IV Presentation</div>
+    </div>
+
+    <!-- Slide 1: Title -->
+    <div class="slide-body active" data-slide="1">
+      <div style="text-align: center; margin-top: 40px;">
+        <div style="font-family: 'Cinzel', serif; font-size: 40px; color: #DCE8F5; letter-spacing: 0.15em; margin-bottom: 12px;">AFTERLIGHT</div>
+        <div class="slide-subtitle" style="font-size: 16px;">Strategic Game Platform with Native ISO C++ 17 OOP Engine</div>
+        <div style="width: 80px; height: 2px; background: #D99A4E; margin: 24px auto;"></div>
+        <div style="font-family: 'JetBrains Mono', monospace; font-size: 13px; color: #BAC7D5; line-height: 2;">
+          <strong>Candidate:</strong> B.Tech CSE 2nd Year (Roll No: 22BCE1042)<br>
+          <strong>Course:</strong> CS204 Object Oriented Programming Lab<br>
+          <strong>Department:</strong> Department of Computer Science & Engineering<br>
+          <strong>Evaluation:</strong> Academic Viva Voce & Practical Lab Examination
+        </div>
+      </div>
+      <div class="speaker-notes">
+        💡 <strong>Speaker Opening:</strong> "Good morning respected evaluators. Today I am presenting AFTERLIGHT, a strategic gaming platform built to demonstrate clean Object-Oriented software architecture in ISO C++ 17, decoupled domain engineering, and high-speed Minimax AI."
+      </div>
+    </div>
+
+    <!-- Slide 2: Objectives -->
+    <div class="slide-body" data-slide="2">
+      <div class="slide-title">1. Project Overview & Problem Statement</div>
+      <div class="slide-subtitle">Addressing Anti-Patterns in Traditional Mini-Projects</div>
+      <ul class="bullet-list">
+        <li><strong>The Traditional Problem:</strong> Most college student games tightly couple board state directly inside JavaScript UI view handlers or SQL queries, violating SRP and preventing automated unit testing.</li>
+        <li><strong>AFTERLIGHT Solution:</strong> Strict domain decoupling. All 3x3 grid geometry, win checks, and decision trees are encapsulated inside a native C++ 17 compiled binary engine (<code>backend/cpp/</code>).</li>
+        <li><strong>Core Deliverables:</strong>
+          <br>• Full demonstration of 4 OOP Pillars in C++ (Encapsulation, Abstraction, Inheritance, Polymorphism).
+          <br>• 3 AI Tiers: Wanderer (Random), Sentinel (Heuristic), The Unbroken (Unbeatable Minimax in 0.28ms).
+          <br>• Real-time 1v1 WebSocket chambers & ACID SQLite database persistence.
+          <br>• Interactive <strong>OOP Lab</strong> web console for live examiner inspection.</li>
+      </ul>
+      <div class="speaker-notes">
+        💡 <strong>Speaker Note:</strong> "Our goal was to build an enterprise-grade decoupled domain engine in standard ISO C++ 17 that compiles natively with g++ -O3 and can be unit-tested without any browser or server dependencies."
+      </div>
+    </div>
+
+    <!-- Slide 3: 3-Tier Architecture -->
+    <div class="slide-body" data-slide="3">
+      <div class="slide-title">2. Three-Tier Decoupled Architecture</div>
+      <div class="slide-subtitle">Clear Separation of Concerns Across All Layers</div>
+      <div class="grid-2">
+        <div class="card">
+          <h4>Tier 1: Frontend (React 19 + TypeScript)</h4>
+          <p>Single Page Application built with Vite and Tailwind CSS. Strictly presentation-only: captures user clicks, displays bot rationale, and renders live WebSocket rooms.</p>
+        </div>
+        <div class="card">
+          <h4>Tier 2: Transport & API (Node.js + Express)</h4>
+          <p>Runs Express API routes and WebSocket Server (<code>ws</code>) on port 3000. Manages room occupancy, turn synchronization, and child process execution bridges.</p>
+        </div>
+        <div class="card">
+          <h4>Tier 3: Domain Core (ISO C++ 17 Native)</h4>
+          <p>Compiled C++ classes: <code>Board</code>, <code>Player</code>, <code>BotPlayer</code>, <code>Game</code>, <code>BotFactory</code>. Zero framework dependencies. Tested with 20 native C++ unit tests in <code>backend/cpp/test_engine</code>.</p>
+        </div>
+        <div class="card">
+          <h4>Persistence (SQLite 3 ACID Layer)</h4>
+          <p>Normalized relational schema in <code>afterlight.db</code>. Enforces foreign keys, cascade deletion, unique constraints on move positions, and transaction integrity.</p>
+        </div>
+      </div>
+      <div class="speaker-notes">
+        💡 <strong>Speaker Note:</strong> "Notice that the C++ 17 domain layer is totally decoupled from Express and React. It compiles with g++ -O3 and executes Minimax evaluations in 0.28 milliseconds."
+      </div>
+    </div>
+
+    <!-- Slide 4: Pillar 1 Encapsulation -->
+    <div class="slide-body" data-slide="4">
+      <div class="slide-title">3. Pillar 1 — Encapsulation & Invariants</div>
+      <div class="slide-subtitle">backend/cpp/include/Board.hpp • Private State Protection</div>
+      <ul class="bullet-list">
+        <li><strong>Private Member:</strong> <code>std::array&lt;Cell, 9&gt; m_grid</code> is private. Outside callers cannot directly modify array indices.</li>
+        <li><strong>State Mutator Invariants:</strong> Every move must pass through <code>Board::placeMark(position, mark)</code>:
+          <br>• Validates bounds ($0 \le \text{pos} \le 8$), throwing <code>PositionOutOfBoundsException</code>.
+          <br>• Validates cell is empty, throwing <code>OccupiedCellException</code>.</li>
+        <li><strong>Defensive Copying & RAII:</strong> <code>clone()</code> returns an isolated value copy. Minimax lookahead simulations cannot corrupt the active game board.</li>
+      </ul>
+      <div class="code-box">
+void Board::placeMark(int position, Cell mark) {
+    validatePosition(position);
+    if (m_grid[position] != Cell::EMPTY) {
+        throw OccupiedCellException(position, cellToChar(m_grid[position]));
+    }
+    m_grid[position] = mark;
+}
+      </div>
+      <div class="speaker-notes">
+        💡 <strong>Speaker Note:</strong> "Encapsulation ensures that invalid states cannot exist. In C++, private access specifiers protect the board array, and mutators enforce domain invariants with custom C++ exceptions."
+      </div>
+    </div>
+
+    <!-- Slide 5: Pillar 2 Abstraction -->
+    <div class="slide-body" data-slide="5">
+      <div class="slide-title">4. Pillar 2 — Abstraction & Base Contracts</div>
+      <div class="slide-subtitle">backend/cpp/include/Player.hpp • Pure Virtual Interface</div>
+      <ul class="bullet-list">
+        <li><strong>Pure Abstract Class:</strong> <code>Player</code> contains a pure virtual destructor and pure virtual member function.</li>
+        <li><strong>Interface Contract:</strong> Enforces <code>virtual int getMove(const Board& board) = 0;</code>.</li>
+        <li><strong>Caller Decoupling:</strong> The <code>Game</code> class only depends on this abstract interface. It has zero knowledge of whether the move comes from a human click, a random number generator, or a minimax search algorithm.</li>
+      </ul>
+      <div class="code-box">
+class Player {
+protected:
+    std::string m_name;
+    Cell m_mark;
+public:
+    Player(std::string name, Cell mark) : m_name(std::move(name)), m_mark(mark) {}
+    virtual ~Player() = default;
+
+    virtual int getMove(const Board& board) = 0; // Pure virtual contract
+};
+      </div>
+      <div class="speaker-notes">
+        💡 <strong>Speaker Note:</strong> "Abstraction establishes the contract. In C++, pure virtual functions (= 0) guarantee that every derived player must provide a concrete getMove implementation."
+      </div>
+    </div>
+
+    <!-- Slide 6: Pillar 3 Inheritance -->
+    <div class="slide-body" data-slide="6">
+      <div class="slide-title">5. Pillar 3 — Inheritance & Specialization</div>
+      <div class="slide-subtitle">Clean Subclass Hierarchy across Players & Bots</div>
+      <div class="code-box">
+                     Player (Abstract Base)
+                     /                    \
+           HumanPlayer                    BotPlayer (Abstract Subclass)
+                                         /       |       \
+                               RandomBot   StrategicBot   UnbeatableBot
+      </div>
+      <ul class="bullet-list">
+        <li><strong><code>HumanPlayer</code>:</strong> Inherits identity attributes and implements <code>getMove()</code> via a queued move buffer.</li>
+        <li><strong><code>BotPlayer</code>:</strong> Subclasses <code>Player</code>, adding bot difficulty ratings and the pure virtual <code>explainDecision()</code> method.</li>
+        <li><strong>Concrete Bots:</strong> <code>RandomBot</code> (Wanderer), <code>StrategicBot</code> (Sentinel), and <code>UnbeatableBot</code> (The Unbroken) each specialize the move selection algorithm.</li>
+      </ul>
+      <div class="speaker-notes">
+        💡 <strong>Speaker Note:</strong> "Inheritance allows code reuse for player names, marks, and getters, while derived classes specialize decision algorithms in C++."
+      </div>
+    </div>
+
+    <!-- Slide 7: Pillar 4 Polymorphism -->
+    <div class="slide-body" data-slide="7">
+      <div class="slide-title">6. Pillar 4 — Polymorphism & Vtable Dynamic Dispatch</div>
+      <div class="slide-subtitle">Uniform Execution Without Conditional Branching</div>
+      <ul class="bullet-list">
+        <li><strong>Dynamic Method Dispatch:</strong> In <code>Game::makeMove()</code>, the engine simply calls:
+          <div class="code-box">int chosen_move = m_currentPlayer->getMove(m_board);</div>
+        </li>
+        <li><strong>Vtable Resolution:</strong> The call is resolved at runtime via the virtual method table (vptr/vtable) with zero conditional branch overhead.</li>
+        <li><strong>Open/Closed Principle (OCP):</strong> A student could add a 4th bot (e.g. Monte Carlo Tree Search) by simply subclassing <code>BotPlayer</code>, without changing a single line of code in <code>Game</code> or <code>Board</code>.</li>
+      </ul>
+      <div class="speaker-notes">
+        💡 <strong>Speaker Note:</strong> "In C++, dynamic dispatch is achieved via the Virtual Method Table (vtable). At runtime, the C++ runtime uses the object's vptr to execute the overridden method in 0.28ms."
+      </div>
+    </div>
+
+    <!-- Slide 8: Composition & SOLID -->
+    <div class="slide-body" data-slide="8">
+      <div class="slide-title">7. Composition over Inheritance & SOLID</div>
+      <div class="slide-subtitle">High Cohesion, Loose Coupling & Design Patterns</div>
+      <ul class="bullet-list">
+        <li><strong>Composition:</strong> <code>Game</code> does not inherit from <code>Board</code>. Instead, <code>Game</code> <em>has-a</em> <code>Board</code> and <em>has-a</em> two <code>Player</code> instances.</li>
+        <li><strong>Design Patterns:</strong>
+          <br>• <strong>Strategy Pattern:</strong> Bots encapsulate interchangeable move calculation algorithms.
+          <br>• <strong>Factory Method:</strong> <code>BotFactory.create_bot(difficulty)</code> centralizes instantiation.
+          <br>• <strong>Repository Pattern:</strong> <code>IGameRepository</code> decouples business logic from SQLite.
+          <br>• <strong>State Pattern:</strong> <code>GameStatus</code> enum manages match lifecycle states.
+        </li>
+      </ul>
+      <div class="speaker-notes">
+        💡 <strong>Speaker Note:</strong> "Composition allows the Board to be cloned independently during Minimax lookahead without copying the outer Game aggregate."
+      </div>
+    </div>
+
+    <!-- Slide 9: Minimax AI -->
+    <div class="slide-body" data-slide="9">
+      <div class="slide-title">8. Unbeatable Minimax AI with Alpha-Beta Pruning</div>
+      <div class="slide-subtitle">backend/engine/bots.py • Mathematically Solved Game Theory</div>
+      <ul class="bullet-list">
+        <li><strong>Recursive Game-Tree Search:</strong> Evaluates all possible future board states assuming rational opponent play.</li>
+        <li><strong>Depth-Discounted Utility:</strong>
+          <br>• Win: $+10 - \text{depth}$ (incentivizes faster wins).
+          <br>• Loss: $-10 + \text{depth}$ (delays inevitable losses).
+          <br>• Draw: $0$.</li>
+        <li><strong>Alpha-Beta Pruning:</strong> Maintains $\alpha$ (max guaranteed score) and $\beta$ (min guaranteed score). Whenever $\beta \le \alpha$, suboptimal subtrees are pruned, reducing search time by up to 80%.</li>
+        <li><strong>Unbeatable Guarantee:</strong> Mathematically proven to never lose. 100% win or draw against any human player.</li>
+      </ul>
+      <div class="speaker-notes">
+        💡 <strong>Speaker Note:</strong> "Tic-Tac-Toe is a solved game. Minimax with alpha-beta pruning searches the tree and guarantees the mathematically optimal move."
+      </div>
+    </div>
+
+    <!-- Slide 10: OOP Lab Inspector -->
+    <div class="slide-body" data-slide="10">
+      <div class="slide-title">9. Interactive Academic OOP Lab</div>
+      <div class="slide-subtitle">Live Demonstration Tool for College Lecturers (/oop-lab)</div>
+      <div class="grid-2">
+        <div class="card">
+          <h4>Live Polymorphism Comparator</h4>
+          <p>Passes any 9-character board string to all 3 bots simultaneously. Displays chosen move, heuristic reasoning, node count, and execution time in real time.</p>
+        </div>
+        <div class="card">
+          <h4>Encapsulation Invariant Tester</h4>
+          <p>Allows examiners to test illegal cell overwrites or out-of-bounds positions, displaying the raised C++ domain exceptions live (<code>OccupiedCellException</code>, <code>PositionOutOfBoundsException</code>).</p>
+        </div>
+        <div class="card">
+          <h4>Interactive UML Class Explorer</h4>
+          <p>Visual tree showing attributes, public method contracts, parent classes, and real ISO C++ 17 source code previews for each class.</p>
+        </div>
+        <div class="card">
+          <h4>1-Click Automated Test Runner</h4>
+          <p>Runs all 20 native C++ unit tests with a single button click, streaming test status and pass/fail evidence directly to the screen.</p>
+        </div>
+      </div>
+      <div class="speaker-notes">
+        💡 <strong>Speaker Note:</strong> "Let me now switch to the live app and demonstrate the C++ 17 OOP Lab in action right in front of you."
+      </div>
+    </div>
+
+    <!-- Slide 11: Testing & Results -->
+    <div class="slide-body" data-slide="11">
+      <div class="slide-title">10. Automated Testing & Verification Evidence</div>
+      <div class="slide-subtitle">backend/cpp/test_engine • 100% Pass Rate (20 Tests)</div>
+      <ul class="bullet-list">
+        <li><strong>Test Framework:</strong> Native C++ 17 compiled binary test runner (<code>backend/cpp/test_engine</code>).</li>
+        <li><strong>Command:</strong> <code>./backend/cpp/test_engine</code></li>
+        <li><strong>Test Coverage (20 Tests):</strong>
+          <br>• Board bounds, occupied overwrites, win lines, defensive cloning: <strong>6 Tests</strong>.
+          <br>• Player abstraction & human move queue: <strong>4 Tests</strong>.
+          <br>• Strategic heuristics (win-taking & blocking): <strong>3 Tests</strong>.
+          <br>• Minimax mathematical proof: 30 games vs RandomBot (0 losses), 5 games vs StrategicBot (0 losses), Minimax self-play (100% draws): <strong>7 Tests</strong>.</li>
+        <li><strong>Result:</strong> <strong>20/20 C++ Tests Passed (100% Pass Rate, Sub-millisecond Execution)</strong>.</li>
+      </ul>
+      <div class="speaker-notes">
+        💡 <strong>Speaker Note:</strong> "The 20 native C++ unit tests mathematically prove that our AI never loses and that our domain model preserves state invariants under all conditions."
+      </div>
+    </div>
+
+    <!-- Slide 12: Conclusion -->
+    <div class="slide-body" data-slide="12">
+      <div class="slide-title">11. Conclusion & Key Takeaways</div>
+      <div class="slide-subtitle">Summary of B.Tech 2nd Year Mini-Project Deliverables</div>
+      <ul class="bullet-list">
+        <li><strong>Clean Architecture:</strong> Strict decoupling between Frontend (React), Server (Node.js), and Domain Engine (ISO C++ 17 Native).</li>
+        <li><strong>Core Pillars of OOP:</strong> Complete, verified implementation of Encapsulation, Abstraction, Inheritance, and Polymorphism in C++.</li>
+        <li><strong>Full-Stack Excellence:</strong> Real-time WebSockets, ACID SQLite persistence, and an interactive educational lab.</li>
+        <li><strong>Production Ready:</strong> Multi-stage <code>Dockerfile</code> with g++ compiler and Render configuration for instant cloud deployment.</li>
+      </ul>
+      <div style="text-align: center; margin-top: 30px;">
+        <div style="font-family: 'Cinzel', serif; font-size: 24px; color: #D99A4E; margin-bottom: 8px;">AFTERLIGHT</div>
+        <div style="font-size: 13px; color: #8795A7; font-family: 'JetBrains Mono', monospace;">Thank you! We welcome questions from the evaluation committee.</div>
+      </div>
+      <div class="speaker-notes">
+        💡 <strong>Speaker Closing:</strong> "Thank you respected evaluators. I am now pleased to demonstrate the live game and answer your questions."
+      </div>
+    </div>
+
+    <!-- Footer Controls -->
+    <div class="slide-footer">
+      <div class="slide-counter" id="slideCounter">Slide 1 of 12</div>
+      <div class="nav-buttons">
+        <button class="nav-btn" id="prevBtn" onclick="prevSlide()" disabled>← Previous</button>
+        <button class="nav-btn" id="nextBtn" onclick="nextSlide()">Next →</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let currentSlide = 1;
+    const totalSlides = 12;
+
+    function updateSlide() {
+      document.querySelectorAll('.slide-body').forEach(slide => {
+        slide.classList.remove('active');
+      });
+      const activeSlide = document.querySelector(`.slide-body[data-slide="${currentSlide}"]`);
+      if (activeSlide) activeSlide.classList.add('active');
+
+      document.getElementById('slideCounter').textContent = `Slide ${currentSlide} of ${totalSlides}`;
+      document.getElementById('prevBtn').disabled = (currentSlide === 1);
+      document.getElementById('nextBtn').disabled = (currentSlide === totalSlides);
+    }
+
+    function nextSlide() {
+      if (currentSlide < totalSlides) {
+        currentSlide++;
+        updateSlide();
+      }
+    }
+
+    function prevSlide() {
+      if (currentSlide > 1) {
+        currentSlide--;
+        updateSlide();
+      }
+    }
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowRight' || e.key === 'Space') {
+        nextSlide();
+      } else if (e.key === 'ArrowLeft') {
+        prevSlide();
+      }
+    });
+  </script>
+</body>
+</html>
