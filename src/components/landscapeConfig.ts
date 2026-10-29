@@ -134,11 +134,12 @@ export const LANDSCAPE_CONFIGS: Record<LandscapeKey, LandscapeConfig> = {
     mobileFocusY: '35%',
   },
 
-  // OOP Lab: Ancient Tree with subdued treatment suitable for reading technical code & architecture
+
+  // OOP Lab: Ancient Tree
   'oop-lab': {
     key: 'oop-lab',
     sceneName: 'The Ancient Tree',
-    tagline: 'Deep roots of architecture and timeless design principles',
+    tagline: 'Deep roots of C++ object-oriented architecture and templates',
     imageWebp: '/images/landscapes/ancient-tree.webp',
     imageFallback: '/images/landscapes/ancient-tree.jpeg',
     enablePointerReveal: false,
