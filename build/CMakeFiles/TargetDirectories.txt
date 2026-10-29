@@ -1,0 +1,7 @@
+/home/dell/Desktop/Afterlight6/build/CMakeFiles/afterlight_core.dir
+/home/dell/Desktop/Afterlight6/build/CMakeFiles/afterlight_server.dir
+/home/dell/Desktop/Afterlight6/build/CMakeFiles/test_game.dir
+/home/dell/Desktop/Afterlight6/build/CMakeFiles/test_server_logic.dir
+/home/dell/Desktop/Afterlight6/build/CMakeFiles/test.dir
+/home/dell/Desktop/Afterlight6/build/CMakeFiles/edit_cache.dir
+/home/dell/Desktop/Afterlight6/build/CMakeFiles/rebuild_cache.dir

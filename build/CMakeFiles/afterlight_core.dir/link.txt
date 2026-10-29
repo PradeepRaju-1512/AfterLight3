@@ -1,0 +1,2 @@
+/usr/bin/ar qc libafterlight_core.a CMakeFiles/afterlight_core.dir/src/Board.cpp.o CMakeFiles/afterlight_core.dir/src/Game.cpp.o CMakeFiles/afterlight_core.dir/src/EasyBot.cpp.o CMakeFiles/afterlight_core.dir/src/MediumBot.cpp.o CMakeFiles/afterlight_core.dir/src/UnbeatableBot.cpp.o CMakeFiles/afterlight_core.dir/src/Database.cpp.o CMakeFiles/afterlight_core.dir/src/AuthService.cpp.o CMakeFiles/afterlight_core.dir/src/MatchHistory.cpp.o CMakeFiles/afterlight_core.dir/src/Room.cpp.o CMakeFiles/afterlight_core.dir/src/RoomManager.cpp.o
+/usr/bin/ranlib libafterlight_core.a

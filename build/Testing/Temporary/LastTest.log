@@ -1,0 +1,56 @@
+Start testing: Oct 29 23:11 IST
+----------------------------------------------------------
+1/2 Testing: GameAndBotTests
+1/2 Test: GameAndBotTests
+Command: "/home/dell/Desktop/Afterlight6/build/test_game"
+Directory: /home/dell/Desktop/Afterlight6/build
+"GameAndBotTests" start time: Oct 29 23:11 IST
+Output:
+----------------------------------------------------------
+======================================
+AFTERLIGHT Game Engine & Bot Test Suite
+======================================
+[TEST] Running test_winning_lines...
+[PASS] All 8 winning lines verified.
+[TEST] Running test_draw_detection...
+[PASS] Draw detection verified.
+[TEST] Running test_invalid_moves_and_turns...
+[PASS] Invalid moves and turn transitions verified.
+[TEST] Running test_bots...
+[TEST] Simulating 50 games of UnbeatableBot vs EasyBot...
+[PASS] 50 games completed: UnbeatableBot won 39, drew 11, lost 0.
+
+ALL ENGINE & BOT TESTS PASSED SUCCESSFULLY!
+<end of output>
+Test time =   0.09 sec
+----------------------------------------------------------
+Test Passed.
+"GameAndBotTests" end time: Oct 29 23:11 IST
+"GameAndBotTests" time elapsed: 00:00:00
+----------------------------------------------------------
+
+2/2 Testing: ServerLogicTests
+2/2 Test: ServerLogicTests
+Command: "/home/dell/Desktop/Afterlight6/build/test_server_logic"
+Directory: /home/dell/Desktop/Afterlight6/build
+"ServerLogicTests" start time: Oct 29 23:11 IST
+Output:
+----------------------------------------------------------
+==========================================
+AFTERLIGHT Server Logic & Multiplayer Test
+==========================================
+[TEST] Running test_auth_and_database...
+[PASS] Database, AuthService (Argon2id), and MatchHistory passed.
+[TEST] Running test_room_lifecycle...
+[PASS] RoomManager, turn validation, and rematch handshake verified.
+
+ALL SERVER & MULTIPLAYER TESTS PASSED!
+<end of output>
+Test time =   0.11 sec
+----------------------------------------------------------
+Test Passed.
+"ServerLogicTests" end time: Oct 29 23:11 IST
+"ServerLogicTests" time elapsed: 00:00:00
+----------------------------------------------------------
+
+End testing: Oct 29 23:11 IST

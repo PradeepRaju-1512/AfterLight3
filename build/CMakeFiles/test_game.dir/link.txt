@@ -1,0 +1,1 @@
+/usr/bin/c++ -Wl,--dependency-file=CMakeFiles/test_game.dir/link.d CMakeFiles/test_game.dir/tests/test_game.cpp.o -o test_game  libafterlight_core.a /usr/lib/x86_64-linux-gnu/libsqlite3.so /usr/lib/x86_64-linux-gnu/libargon2.so

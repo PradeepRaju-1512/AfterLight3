@@ -1,0 +1,1 @@
+/usr/bin/c++ -Wl,--dependency-file=CMakeFiles/afterlight_server.dir/link.d CMakeFiles/afterlight_server.dir/src/server.cpp.o -o afterlight_server  libafterlight_core.a /usr/lib/x86_64-linux-gnu/libsqlite3.so /usr/lib/x86_64-linux-gnu/libargon2.so
