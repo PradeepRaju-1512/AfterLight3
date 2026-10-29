@@ -1,0 +1,6 @@
+{
+  "name": "AFTERLIGHT - Cyberpunk C++ Tic-Tac-Toe",
+  "description": "A high-performance C++17 OOP Tic-Tac-Toe game with Crow HTTP/WebSocket server, SQLite persistence, calibrated bot algorithms, and real-time private room multiplayer.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

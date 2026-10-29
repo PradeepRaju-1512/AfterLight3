@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AFTERLIGHT - Cyberpunk C++ Tic-Tac-Toe</title>
+  <meta name="description" content="A high-performance C++17 OOP Tic-Tac-Toe game with Crow HTTP/WebSocket server, SQLite persistence, calibrated bot algorithms, and real-time private room multiplayer." />
+  <meta property="og:title" content="AFTERLIGHT - Cyberpunk C++ Tic-Tac-Toe" />
+  <meta property="og:description" content="A high-performance C++17 OOP Tic-Tac-Toe game with Crow HTTP/WebSocket server, SQLite persistence, calibrated bot algorithms, and real-time private room multiplayer." />
+  <meta property="og:type" content="website" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <link rel="stylesheet" href="/style.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;600;700&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+</head>
+<body class="cyber-bg">
+  <div class="scanlines"></div>
+
+  <!-- Header & Top Bar -->
+  <header class="cyber-header">
+    <div class="header-container">
+      <div class="brand-zone">
+        <span class="cyber-glitch-logo" data-text="AFTERLIGHT">AFTERLIGHT</span>
+        <span class="sub-mark">C++17 OOP ENGINE</span>
+      </div>
+
+      <nav class="nav-links">
+        <button id="nav-lobby-btn" class="nav-btn active">LOBBY</button>
+        <button id="nav-history-btn" class="nav-btn">MATCH HISTORY</button>
+      </nav>
+
+      <div class="user-zone">
+        <div id="user-info" class="user-badge hidden">
+          <span class="user-prefix">OPERATOR:</span>
+          <span id="user-display-name" class="user-name">---</span>
+          <button id="logout-btn" class="cyber-action-btn-sm">LOGOUT</button>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Global Toast Notice -->
+  <div id="toast" class="toast hidden"></div>
+
+  <!-- Main Container -->
+  <main class="main-viewport">
+
+    <!-- VIEW 1: AUTHENTICATION -->
+    <section id="view-auth" class="panel auth-panel">
+      <div class="panel-header">
+        <h2 class="panel-title">SYSTEM ACCESS</h2>
+        <span class="panel-tag">AUTH PROTOCOL // SQLITE + ARGON2ID</span>
+      </div>
+
+      <div class="auth-tabs">
+        <button id="tab-login" class="tab-btn active">LOG IN</button>
+        <button id="tab-register" class="tab-btn">REGISTER</button>
+      </div>
+
+      <!-- Login Form -->
+      <form id="login-form" class="auth-form">
+        <div class="form-group">
+          <label for="login-username">USERNAME OR EMAIL</label>
+          <input type="text" id="login-username" class="cyber-input" placeholder="e.g. netrunner_01" required autocomplete="username" />
+        </div>
+        <div class="form-group">
+          <label for="login-password">PASSWORD</label>
+          <input type="password" id="login-password" class="cyber-input" placeholder="••••••••" required autocomplete="current-password" />
+        </div>
+        <button type="submit" class="cyber-btn primary-btn w-full">INITIALIZE SESSION</button>
+      </form>
+
+      <!-- Register Form -->
+      <form id="register-form" class="auth-form hidden">
+        <div class="form-group">
+          <label for="reg-username">OPERATOR USERNAME</label>
+          <input type="text" id="reg-username" class="cyber-input" placeholder="Min. 3 characters" required minlength="3" maxlength="30" />
+        </div>
+        <div class="form-group">
+          <label for="reg-email">SECURE EMAIL</label>
+          <input type="email" id="reg-email" class="cyber-input" placeholder="operator@network.io" required />
+        </div>
+        <div class="form-group">
+          <label for="reg-password">PASSWORD</label>
+          <input type="password" id="reg-password" class="cyber-input" placeholder="Min. 6 characters" required minlength="6" />
+        </div>
+        <button type="submit" class="cyber-btn primary-btn w-full">CREATE ACCOUNT</button>
+      </form>
+
+      <div class="auth-footer-notes">
+        <p>Passwords stored as secure memory-hard Argon2id hashes in SQLite.</p>
+      </div>
+    </section>
+
+    <!-- VIEW 2: LOBBY HUB -->
+    <section id="view-lobby" class="panel lobby-panel hidden">
+      <div class="panel-header">
+        <h2 class="panel-title">COMBAT SECTORS</h2>
+        <span class="panel-tag">CHOOSE TARGET MODE</span>
+      </div>
+
+      <div class="lobby-grid">
+        <!-- Sector 1: Solo vs Bot -->
+        <div class="sector-card">
+          <div class="sector-header">
+            <span class="sector-badge">SECTOR 01</span>
+            <h3 class="sector-title">ALGORITHM COMBAT</h3>
+          </div>
+          <p class="sector-desc">Duel against polymorphic C++ AI bots running verified game decision algorithms.</p>
+
+          <div class="difficulty-picker">
+            <label class="diff-option">
+              <input type="radio" name="bot-diff" value="easy" />
+              <div class="diff-box">
+                <span class="diff-name">EASY</span>
+                <span class="diff-detail">Random legal placement</span>
+              </div>
+            </label>
+
+            <label class="diff-option">
+              <input type="radio" name="bot-diff" value="medium" checked />
+              <div class="diff-box">
+                <span class="diff-name">MEDIUM</span>
+                <span class="diff-detail">Immediate win/block heuristic</span>
+              </div>
+            </label>
+
+            <label class="diff-option">
+              <input type="radio" name="bot-diff" value="unbeatable" />
+              <div class="diff-box">
+                <span class="diff-name">UNBEATABLE</span>
+                <span class="diff-detail">Full Minimax state tree</span>
+              </div>
+            </label>
+          </div>
+
+          <button id="start-bot-btn" class="cyber-btn primary-btn w-full mt-4">ENGAGE BOT</button>
+        </div>
+
+        <!-- Sector 2: Private Room Multiplayer -->
+        <div class="sector-card">
+          <div class="sector-header">
+            <span class="sector-badge">SECTOR 02</span>
+            <h3 class="sector-title">ONLINE MULTIPLAYER</h3>
+          </div>
+          <p class="sector-desc">Real-time peer duels through C++ Crow WebSocket room coordination.</p>
+
+          <div class="multiplayer-actions">
+            <button id="create-room-btn" class="cyber-btn primary-btn w-full">HOST PRIVATE ROOM</button>
+
+            <div class="divider-text"><span>OR JOIN WITH CODE</span></div>
+
+            <div class="join-room-row">
+              <input type="text" id="join-room-input" class="cyber-input font-mono" placeholder="AL-XXXX" maxlength="10" />
+              <button id="join-room-btn" class="cyber-btn secondary-btn">ENTER</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- VIEW 3: ACTIVE GAME ARENA -->
+    <section id="view-arena" class="panel arena-panel hidden">
+      <!-- Arena Status Banner -->
+      <div class="arena-hud">
+        <div class="hud-player hud-player-x">
+          <span class="hud-mark mark-x">X</span>
+          <div class="hud-details">
+            <span id="arena-player-x-name" class="hud-name">Player X</span>
+            <span class="hud-role">HOST // FIRST</span>
+          </div>
+        </div>
+
+        <div class="hud-center">
+          <div id="arena-turn-banner" class="hud-turn-banner">
+            <span id="turn-label">CURRENT TURN:</span>
+            <span id="turn-mark" class="turn-highlight">X</span>
+          </div>
+          <div id="room-code-tag" class="hud-room-code hidden">
+            ROOM: <span id="display-room-code" class="font-mono">---</span>
+            <button id="copy-room-code-btn" class="copy-btn" title="Copy code">COPY</button>
+          </div>
+        </div>
+
+        <div class="hud-player hud-player-o">
+          <div class="hud-details text-right">
+            <span id="arena-player-o-name" class="hud-name">Opponent</span>
+            <span id="arena-player-o-sub" class="hud-role">OPPONENT // SECOND</span>
+          </div>
+          <span class="hud-mark mark-o">O</span>
+        </div>
+      </div>
+
+      <!-- 3x3 Grid Board -->
+      <div class="board-wrapper">
+        <div id="game-board" class="tic-tac-board">
+          <button class="cell" data-index="0" aria-label="Cell 1"></button>
+          <button class="cell" data-index="1" aria-label="Cell 2"></button>
+          <button class="cell" data-index="2" aria-label="Cell 3"></button>
+          <button class="cell" data-index="3" aria-label="Cell 4"></button>
+          <button class="cell" data-index="4" aria-label="Cell 5"></button>
+          <button class="cell" data-index="5" aria-label="Cell 6"></button>
+          <button class="cell" data-index="6" aria-label="Cell 7"></button>
+          <button class="cell" data-index="7" aria-label="Cell 8"></button>
+          <button class="cell" data-index="8" aria-label="Cell 9"></button>
+        </div>
+
+        <!-- Waiting for Player O Modal Overlay -->
+        <div id="waiting-overlay" class="arena-overlay hidden">
+          <div class="overlay-card">
+            <h3 class="overlay-title">WAITING FOR CHALLENGER</h3>
+            <p class="overlay-desc">Share this room code with another registered operator to begin:</p>
+            <div class="code-box">
+              <span id="waiting-code-display" class="font-mono highlight-code">AL-XXXX</span>
+              <button id="copy-waiting-code-btn" class="cyber-btn-sm">COPY CODE</button>
+            </div>
+            <div class="overlay-footer">
+              <button id="cancel-room-btn" class="cyber-btn secondary-btn">ABORT ROOM</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Game Over Modal Overlay -->
+        <div id="game-over-overlay" class="arena-overlay hidden">
+          <div class="overlay-card">
+            <h3 id="verdict-title" class="verdict-title">VICTORY</h3>
+            <p id="verdict-detail" class="verdict-detail">Player X wins by alignment.</p>
+
+            <div id="rematch-status" class="rematch-indicator hidden">
+              <span>Opponent requested a rematch!</span>
+            </div>
+
+            <div class="overlay-actions">
+              <button id="rematch-btn" class="cyber-btn primary-btn">REMATCH</button>
+              <button id="exit-arena-btn" class="cyber-btn secondary-btn">EXIT TO LOBBY</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- VIEW 4: MATCH HISTORY -->
+    <section id="view-history" class="panel history-panel hidden">
+      <div class="panel-header">
+        <h2 class="panel-title">MATCH ARCHIVES</h2>
+        <span class="panel-tag">PERSISTED IN SQLITE</span>
+      </div>
+
+      <div class="history-table-container">
+        <table class="history-table">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>MODE</th>
+              <th>PLAYER X</th>
+              <th>PLAYER O</th>
+              <th>RESULT</th>
+              <th>DATE</th>
+            </tr>
+          </thead>
+          <tbody id="history-tbody">
+            <tr>
+              <td colspan="6" class="empty-state">No recorded matches found.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="panel-footer-actions">
+        <button id="history-back-btn" class="cyber-btn secondary-btn">RETURN TO LOBBY</button>
+      </div>
+    </section>
+
+  </main>
+
+  <footer class="cyber-footer">
+    <div class="footer-container">
+      <span>AFTERLIGHT // C++17 CROW SERVER & SQLITE ENGINE</span>
+      <span class="font-mono">PORT 3000 · AUTHORITATIVE BACKEND</span>
+    </div>
+  </footer>
+
+  <script src="/app.js"></script>
+</body>
+</html>
