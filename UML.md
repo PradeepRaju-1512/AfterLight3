@@ -33,17 +33,13 @@ flowchart LR
 ## Class diagram
 
 ```mermaid
-%%{init: {"theme": "base", "themeVariables": {"fontSize": "20px"}}}%%
+%%{init: {"theme": "dark", "themeVariables": {"background": "#0b1220", "primaryColor": "#172033", "primaryTextColor": "#ffffff", "primaryBorderColor": "#ffffff", "lineColor": "#ffffff", "textColor": "#ffffff", "classTextColor": "#ffffff", "fontSize": "20px"}}}%%
 classDiagram
-    class CrowServer {
-        <<process entry point>>
-        REST routes
-        WebSocket route
-        static asset routes
-    }
+    classDef default fill:#172033,stroke:#ffffff,stroke-width:2px,color:#ffffff;
 
     class Board {
-        -array~char,9~ cells_
+        -cells_ : array~char,9~
+        +Board()
         +isValidMove(index) bool
         +makeMove(index, mark) bool
         +reset() void
@@ -65,13 +61,15 @@ classDiagram
     }
 
     class Game {
-        -Board board_
-        -char currentTurn_
-        -GameStatus status_
-        -int moveCount_
+        -board_ : Board
+        -currentTurn_ : char
+        -status_ : GameStatus
+        -moveCount_ : int
+        +Game()
         +reset() void
         +playMove(index, playerMark) bool
-        +getBoard() Board
+        +getBoard() const Board&
+        +getBoard() Board&
         +getCurrentTurn() char
         +getStatus() GameStatus
         +getMoveCount() int
@@ -82,29 +80,33 @@ classDiagram
 
     class BotStrategy {
         <<abstract>>
-        +selectMove(board, botMark)* int
-        +getDifficulty()* string
+        +selectMove(board, botMark) int*
+        +getDifficulty() string*
     }
     class EasyBot {
-        -mt19937 rng_
+        -rng_ : mt19937
+        +EasyBot()
         +selectMove(board, botMark) int
         +getDifficulty() string
     }
     class MediumBot {
-        -mt19937 rng_
+        -rng_ : mt19937
+        +MediumBot()
         +selectMove(board, botMark) int
         +getDifficulty() string
     }
     class UnbeatableBot {
+        +UnbeatableBot()
         +selectMove(board, botMark) int
         +getDifficulty() string
         -minimax(board, depth, isMaximizing, botMark, oppMark) int
     }
 
     class Player {
-        -int id_
-        -string username_
-        -char mark_
+        -id_ : int
+        -username_ : string
+        -mark_ : char
+        +Player(id, username, mark)
         +getId() int
         +getUsername() string
         +getMark() char
@@ -114,114 +116,131 @@ classDiagram
     }
 
     class Room {
-        -string roomCode_
-        -Game game_
-        -Player playerX_
-        -optional~Player~ playerO_
-        -bool rematchRequestedX_
-        -bool rematchRequestedO_
-        -time_point lastActivity_
+        -roomCode_ : string
+        -game_ : Game
+        -playerX_ : Player
+        -playerO_ : optional~Player~
+        -rematchRequestedX_ : bool
+        -rematchRequestedO_ : bool
+        -lastActivity_ : time_point
+        +Room(code, host)
+        +getRoomCode() const string&
+        +getGame() const Game&
+        +getGame() Game&
+        +getPlayerX() const Player&
+        +getPlayerO() const optional~Player~&
         +join(guest) bool
         +removePlayer(userId) bool
         +handleMove(userId, cellIndex) bool
         +handleRematchRequest(userId) bool
+        +isRematchRequestedBy(mark) bool
         +isFull() bool
         +updateActivity() void
+        +getLastActivity() time_point
     }
 
     class RoomManager {
-        -unordered_map~string, shared_ptr~Room~~ rooms_
-        -mutex mutex_
+        -rooms_ : unordered_map~string, shared_ptr~Room~~
+        -mutex_ : mutex
+        +RoomManager()
         +createRoom(host) shared_ptr~Room~
         +getRoom(code) shared_ptr~Room~
         +joinRoom(code, guest) pair~bool,string~
         +removeRoom(code) bool
         +cleanupInactiveRooms(timeoutMinutes) void
         +getRoomCount() size_t
+        -generateUniqueCode() string
     }
 
     class Database {
-        -sqlite3* db_
-        -string dbPath_
-        -mutex dbMutex_
+        -db_ : sqlite3*
+        -dbPath_ : string
+        -dbMutex_ : mutex
+        +Database(dbPath)
+        +~Database()
         +initializeSchema(schemaFilePath) bool
         +execute(sql) bool
         +getRawDb() sqlite3*
         +getMutex() mutex
+        -Database(other)
+        -operator=(other) Database&
     }
 
     class UserRecord {
-        <<data>>
-        +int id
-        +string username
-        +string email
-        +string createdAt
+        <<struct>>
+        +id : int
+        +username : string
+        +email : string
+        +createdAt : string
     }
     class AuthResult {
-        <<data>>
-        +bool success
-        +string message
-        +string token
-        +optional~UserRecord~ user
+        <<struct>>
+        +success : bool
+        +message : string
+        +token : string
+        +user : optional~UserRecord~
     }
     class AuthService {
-        -Database& db_
-        -unordered_map~string, UserRecord~ sessions_
-        -mutex sessionMutex_
+        -db_ : Database&
+        -sessions_ : unordered_map~string, UserRecord~
+        -sessionMutex_ : mutex
+        +AuthService(db)
         +registerUser(username, email, password) AuthResult
         +loginUser(usernameOrEmail, password) AuthResult
         +logout(token) bool
         +validateSession(token) optional~UserRecord~
+        -generateSessionToken() string
+        -hashPassword(password) string
+        -verifyPassword(encodedHash, password) bool
     }
 
     class MatchRecord {
-        <<data>>
-        +int id
-        +int playerXId
-        +string playerXUsername
-        +optional~int~ playerOId
-        +string playerOUsername
-        +string gameMode
-        +optional~string~ botDifficulty
-        +optional~int~ winnerId
-        +string result
-        +string createdAt
+        <<struct>>
+        +id : int
+        +playerXId : int
+        +playerXUsername : string
+        +playerOId : optional~int~
+        +playerOUsername : string
+        +gameMode : string
+        +botDifficulty : optional~string~
+        +winnerId : optional~int~
+        +result : string
+        +createdAt : string
     }
     class MatchHistory {
-        -Database& db_
+        -db_ : Database&
+        +MatchHistory(db)
         +recordMatch(playerXId, playerOId, gameMode, botDifficulty, winnerId, result) bool
         +getUserMatches(userId, limit) vector~MatchRecord~
     }
 
     class WsClientInfo {
-        <<server-local data>>
-        +string token
-        +int userId
-        +string username
-        +string roomCode
+        <<struct>>
+        +token : string
+        +userId : int
+        +username : string
+        +roomCode : string
     }
 
     Game *-- Board : owns
-    Game --> GameStatus : state
+    Game --> GameStatus : status
     BotStrategy <|.. EasyBot
     BotStrategy <|.. MediumBot
     BotStrategy <|.. UnbeatableBot
-    BotStrategy ..> Board : chooses move from
+    BotStrategy ..> Board : reads board
     Room *-- Game : owns
-    Room *-- Player : player X
-    Room o-- Player : optional player O
-    RoomManager "1" o-- "0..*" Room : manages
+    Room "1" *-- "1" Player : player X
+    Room "1" *-- "0..1" Player : optional player O
+    RoomManager "1" o-- "0..*" Room : shared room registry
     AuthService --> Database : uses
     MatchHistory --> Database : uses
-    AuthService ..> UserRecord : returns
     AuthService ..> AuthResult : returns
+    AuthResult *-- "0..1" UserRecord : optional user
     MatchHistory ..> MatchRecord : returns
-    CrowServer --> AuthService : routes
-    CrowServer --> MatchHistory : routes
-    CrowServer --> RoomManager : routes
-    CrowServer ..> BotStrategy : selects implementation
-    CrowServer ..> WsClientInfo : tracks connections
+    WsClientInfo ..> Room : identifies joined room by code
 ```
+
+`src/server.cpp` is the application entry point, not a C++ class, so it is intentionally described in the system-context diagram rather than represented as a class. It wires the services together, selects a concrete bot strategy, and stores `WsClientInfo` records for active WebSocket connections.
 
 ## Class details
 
@@ -246,4 +265,4 @@ classDiagram
 | `MatchRecord` | Data structure describing a stored match, including participants, mode, optional bot difficulty and winner, result, and timestamp. |
 | `WsClientInfo` | Server-local data associated with a WebSocket connection: session token, user identity, and joined room code. It is not a persisted database record. |
 
-The `*--` relationships indicate composition: `Game` owns its `Board`, and `Room` owns its `Game` and host player. `RoomManager` keeps shared references to active rooms. Bot implementations inherit from `BotStrategy` and are selected at runtime by the server.
+The `*--` relationships indicate composition: `Game` owns its `Board`; `Room` owns its `Game` and player slots; and `AuthResult` contains an optional `UserRecord`. `RoomManager` keeps shared references to active rooms. Bot implementations inherit from `BotStrategy` and are selected at runtime by the server.
