@@ -4,15 +4,15 @@ This document focuses on the system context and the main C++ class relationships
 
 ## System context
 
-The browser is the user-facing client. It communicates with the C++ Crow server using HTTP for account, bot, room setup, and history operations, and WebSockets for live multiplayer. The optional TypeScript bridge serves the browser assets and proxies requests to Crow. The server delegates game and service logic to `afterlight_core`; SQLite persists user and match data, while sessions, active rooms, and socket connections remain in memory.
+The browser is the user-facing client. In the standalone setup, the C++ Crow server serves the browser assets and handles HTTP operations and the live multiplayer WebSocket connection directly. In the optional TypeScript bridge setup, the bridge serves the browser assets and proxies HTTP API and WebSocket traffic to Crow. These are alternative browser-to-server paths. The server delegates game and service logic to `afterlight_core`; SQLite persists user and match data, while sessions, active rooms, and socket connections remain in memory.
 
 ```mermaid
-%%{init: {"theme": "base", "themeVariables": {"fontSize": "20px"}, "flowchart": {"nodeSpacing": 60, "rankSpacing": 80}}}%%
+%%{init: {"theme": "dark", "themeVariables": {"background": "#0b1220", "primaryColor": "#172033", "primaryTextColor": "#ffffff", "primaryBorderColor": "#ffffff", "lineColor": "#ffffff", "textColor": "#ffffff", "fontSize": "20px"}, "flowchart": {"nodeSpacing": 60, "rankSpacing": 80}}}%%
 flowchart LR
     Player((Player))
     Browser["Browser client<br/>web/index.html · web/style.css · web/app.js"]
-    Bridge["Optional TypeScript bridge<br/>server.ts · port 3000"]
-    Server["C++ Crow server<br/>src/server.cpp"]
+    Bridge["Optional TypeScript development bridge<br/>serves frontend · port 3000"]
+    Server["C++ Crow server<br/>serves frontend in standalone mode · port 3000<br/>bridge backend · port 5000"]
     GameCore["Game logic<br/>Game · Board · BotStrategy"]
     Services["Application services<br/>AuthService · RoomManager · Room"]
     Persistence["Persistence classes<br/>MatchHistory · Database"]
@@ -20,9 +20,9 @@ flowchart LR
     SQLite[("SQLite<br/>users · matches")]
 
     Player --> Browser
-    Browser -->|"HTTP /api/* and WebSocket /ws"| Server
-    Browser -. "optional host/proxy" .-> Bridge
-    Bridge -. "proxies API and WebSocket traffic" .-> Server
+    Browser -->|"Standalone: HTTP /api/* · WebSocket /ws"| Server
+    Browser -->|"Bridge mode: HTTP /api/* · WebSocket /ws"| Bridge
+    Bridge -->|"Proxies /api/* and /ws"| Server
     Server --> GameCore
     Server --> Services
     Server --> Persistence
