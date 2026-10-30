@@ -7,8 +7,10 @@ AFTERLIGHT is a C++17 Tic-Tac-Toe game and web application built as an object-or
 - [Overview](#overview)
 - [Key Features](#key-features)
 - [System Architecture](#system-architecture)
+  - [Multiplayer room and move flow](#multiplayer-room-and-move-flow)
 - [Object-Oriented Design & OOP Principles](#object-oriented-design--oop-principles)
 - [Database Schema & ER Design](#database-schema--er-design)
+  - [Entity-relationship diagram](#entity-relationship-diagram)
 - [Project Directory Structure](#project-directory-structure)
 - [REST API Reference](#rest-api-reference)
 - [Installation & Quick Start](#installation--quick-start)
@@ -123,6 +125,7 @@ sequenceDiagram
     participant API as Crow HTTP routes
     participant WS as Crow WebSocket
     participant Room as RoomManager / Room / Game
+    participant History as MatchHistory / Database
     participant DB as SQLite
 
     X->>API: POST /api/rooms/create + token
@@ -134,18 +137,21 @@ sequenceDiagram
     API->>Room: Add player O
     API-->>O: Join success
     O->>WS: Connect /ws; send join(token, roomCode)
-    WS->>Room: Validate session and room; register socket
+    WS->>Room: Validate session and room; register both sockets
     WS-->>X: room_state
     WS-->>O: room_state
     X->>WS: move(cell)
-    WS->>Room: Validate player, turn, cell, game status
-    Room-->>WS: Move accepted / updated game
+    WS->>Room: Validate identity, turn, cell, and game status
+    Room-->>WS: Accept move and update Game
     opt Game has ended
-        WS->>DB: Record PvP result
+        WS->>History: Record PvP result
+        History->>DB: Insert match row
     end
     WS-->>X: Broadcast room_state
     WS-->>O: Broadcast room_state
 ```
+
+The room code is created over HTTP and is not itself a WebSocket credential; both players must also provide valid session tokens when joining the socket. The server broadcasts the latest room state after connection and accepted moves. If a move ends the game, the server records the result before broadcasting the updated state.
 
 ### Authentication and history flow
 
@@ -234,34 +240,32 @@ AuthService ── uses ──> Database <── uses ── MatchHistory
 
 The schema in [`database/schema.sql`](database/schema.sql) defines two persistent entities: users and completed matches. SQLite foreign-key enforcement is enabled by the application.
 
-```text
-                     +-------------------------+
-                     | users                   |
-                     +-------------------------+
-                     | PK id                   |
-                     | username (unique)       |
-                     | email (unique)          |
-                     | password_hash           |
-                     | created_at              |
-                     +------------+------------+
-                                  | 1
-                 +----------------+----------------+
-                 | 0..*            | 0..*           | 0..*
-        player_x_id       player_o_id         winner_id
-                 |                 |                  |
-                 +-----------------v------------------+
-                     +-------------------------+
-                     | matches                 |
-                     +-------------------------+
-                     | PK id                   |
-                     | FK player_x_id NOT NULL |
-                     | FK player_o_id NULL     |
-                     | FK winner_id NULL       |
-                     | game_mode               |
-                     | bot_difficulty NULL     |
-                     | result                  |
-                     | created_at              |
-                     +-------------------------+
+### Entity-relationship diagram
+
+```mermaid
+erDiagram
+    USERS ||--o{ MATCHES : "plays as X"
+    USERS o|--o{ MATCHES : "plays as O (optional)"
+    USERS o|--o{ MATCHES : "is winner (optional)"
+
+    USERS {
+        INTEGER id PK
+        TEXT username UK
+        TEXT email UK
+        TEXT password_hash
+        DATETIME created_at
+    }
+
+    MATCHES {
+        INTEGER id PK
+        INTEGER player_x_id FK
+        INTEGER player_o_id FK "nullable for bot matches"
+        INTEGER winner_id FK "nullable for draws"
+        TEXT game_mode "bot or pvp"
+        TEXT bot_difficulty "easy, medium, unbeatable, or NULL"
+        TEXT result "X_WON, O_WON, or DRAW"
+        DATETIME created_at
+    }
 ```
 
 ### `users` entity
