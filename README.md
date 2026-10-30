@@ -2,7 +2,7 @@
 
 AFTERLIGHT is a C++17 Tic-Tac-Toe game and web application built as an object-oriented programming project. It combines a server-authoritative game engine, three bot strategies, account authentication, private online multiplayer, match history, and a browser-based interface.
 
-## Table of Contents
+# Table of Contents
 
 - [Overview](#overview)
 - [Key Features](#key-features)
@@ -16,92 +16,265 @@ AFTERLIGHT is a C++17 Tic-Tac-Toe game and web application built as an object-or
 
 ## Overview
 
-The C++ server is the authority for game rules, bot decisions, multiplayer room state, authentication, and match persistence. The browser client presents the game and sends requests to that server using HTTP and WebSockets. SQLite stores user accounts and completed match records.
+AFTERLIGHT is a browser-based Tic-Tac-Toe game backed by a C++17 server. Users can play against three bot difficulty levels or compete in private multiplayer rooms. Accounts and completed matches are persisted in SQLite.
 
-The project demonstrates object-oriented design through encapsulated game state, an abstract bot interface and interchangeable strategies, composed game and room objects, and dedicated services for authentication, database access, and match history.
+The C++ server is authoritative: it validates moves and turns, decides bot moves, coordinates multiplayer room state, authenticates users, and records results. The browser client is responsible for presentation and sending HTTP/WebSocket messages; it is not trusted to determine multiplayer outcomes.
 
 ## Key Features
 
-- **Three bot difficulty levels:** Easy selects a random legal move, Medium applies a win/block heuristic, and Unbeatable searches game states with Minimax.
-- **Private online multiplayer:** Players create or join rooms using a room code and play through a live WebSocket connection.
-- **Authoritative game rules:** The server validates turns, player identity, cell availability, and game completion.
-- **Accounts and sessions:** Users can register, log in, log out, and retrieve their profile.
-- **Match history:** Completed matches are stored in SQLite and history can be retrieved for the signed-in user.
-- **Browser interface:** A responsive web client is served by the C++ backend.
-- **Automated tests:** CTest runs game, bot, authentication, persistence, and room-logic tests.
+### Bot opponents
+
+Choose Easy for a random legal move, Medium for a win/block heuristic, or Unbeatable for a Minimax-based strategy.
+
+### Private multiplayer
+
+An authenticated player creates a room and shares its code. A second authenticated player joins, and the server synchronizes board state and turns over WebSockets.
+
+### Accounts and match history
+
+Users can register, log in, log out, view their profile, and retrieve their recent match records. Password hashes and completed match data are stored in SQLite.
+
+### Browser application and automated tests
+
+The web client provides the game interface. CTest runs the C++ game/bot and server-logic test executables.
 
 ## System Architecture
 
-```text
-Browser client (web/)
-   | HTTP REST API                 | WebSocket (/ws)
-   +-------------------------------+
-                   |
-         C++17 Crow server (src/server.cpp)
-          |          |             |
-    Game engine   AuthService   RoomManager
-    and bots      MatchHistory  Room / Game
-          \          |             /
-                 SQLite database
-              users and matches
+The application is organized as a browser client, a C++ server, a core-logic layer, and a persistence layer. The server exposes two communication styles: request/response HTTP endpoints for discrete operations and a persistent WebSocket connection for live multiplayer updates.
+
+```mermaid
+flowchart TB
+    Browser["Browser client<br/>web/index.html · style.css · app.js"]
+    Bridge["Optional TypeScript bridge<br/>server.ts · port 3000"]
+    Crow["C++17 Crow server<br/>src/server.cpp"]
+    Core["Game core<br/>Board · Game · BotStrategy"]
+    Services["Application services<br/>AuthService · RoomManager · Room"]
+    History["Persistence services<br/>Database · MatchHistory"]
+    Runtime[("In-memory state<br/>sessions · active rooms · sockets")]
+    SQLite[("SQLite database<br/>users · matches")]
+
+    Browser -->|"HTTP JSON: /api/*"| Crow
+    Browser -->|"WebSocket: /ws"| Crow
+    Browser -. "optional proxy for /api and /ws" .-> Bridge
+    Bridge -. "HTTP and WebSocket proxy" .-> Crow
+    Crow --> Core
+    Crow --> Services
+    Crow --> History
+    Services <--> Runtime
+    History --> SQLite
 ```
 
-- **Frontend:** `web/index.html`, `web/style.css`, and `web/app.js` implement the user interface and browser-side HTTP/WebSocket communication.
-- **HTTP and WebSocket server:** Crow serves the frontend, exposes the REST endpoints, and coordinates real-time room updates.
-- **Core game library:** `afterlight_core` contains the board, game, bot strategies, database wrapper, authentication, match history, and room management.
-- **Persistence:** SQLite stores accounts and match records. Active sessions and multiplayer rooms are held in server memory.
-- **Development bridge:** `server.ts` optionally starts the C++ server on port `5000` and proxies `/api/*` and `/ws` traffic while serving the frontend on port `3000`.
+### Browser client
 
-The C++ server is the authoritative backend; the frontend does not decide the outcome of a multiplayer move.
+`web/index.html`, `web/style.css`, and `web/app.js` render the interface and communicate with the server. It uses HTTP for account, bot, room setup, and history operations, and a WebSocket for live room play.
+
+### Crow HTTP and WebSocket server
+
+`src/server.cpp` serves the web assets, exposes JSON REST endpoints, authenticates requests, and manages the `/ws` connection protocol. It delegates game and business operations to the C++ core classes.
+
+### C++ core and persistence
+
+The `afterlight_core` CMake library contains game rules, bot algorithms, authentication, match-history access, and room management. `Database` wraps SQLite access; `MatchHistory` stores and retrieves completed games.
+
+### Runtime state and development bridge
+
+SQLite persists users and matches. Sessions, active rooms, and WebSocket connections are held in memory and therefore do not survive a server restart. Optionally, `server.ts` serves the app on port `3000` and proxies API/WebSocket requests to the C++ server on port `5000`.
+
+### Request and response lifecycle
+
+For HTTP operations, the browser sends a JSON request to a Crow route. The route checks authentication when required, invokes the relevant core class or service, and returns a JSON response with the operation result. Multiplayer messages instead remain on the `/ws` connection so the server can broadcast updated room state to connected clients.
+
+### Bot-game flow
+
+The browser manages the bot-mode board presentation and checks the local game result after each move. For a bot turn, it sends the board to the C++ endpoint; the server selects the requested strategy and returns a cell index. When the game ends, the browser submits the result for persistence.
+
+```mermaid
+flowchart TD
+    Start([Player selects a cell])
+    Apply["Browser applies player move"]
+    UserEnd{"Did player move<br/>end the game?"}
+    RecordUser["Browser handles game over"]
+    Request["POST /api/bot/move<br/>board + difficulty + bot mark"]
+    Authenticate["Server validates session"]
+    Choose["Server constructs selected<br/>BotStrategy implementation"]
+    Select["Strategy selects legal cell"]
+    Response["Server returns move index"]
+    ApplyBot["Browser applies bot move<br/>and checks game status"]
+    BotEnd{"Game over?"}
+    Save["POST /api/matches/record"]
+    Store[("SQLite matches table")]
+    Continue["Render board; player continues"]
+
+    Start --> Apply --> UserEnd
+    UserEnd -- Yes --> RecordUser --> Save
+    UserEnd -- No --> Request --> Authenticate --> Choose --> Select --> Response --> ApplyBot --> BotEnd
+    BotEnd -- Yes --> Save --> Store
+    BotEnd -- No --> Continue --> Start
+```
+
+### Multiplayer room and move flow
+
+Room creation and joining begin with authenticated HTTP requests. Each client then connects to `/ws` and sends a `join` message with its token and room code. After joining, the server validates each move against the room's players and game state, records a completed match, and broadcasts updated state.
+
+```mermaid
+sequenceDiagram
+    participant X as Host browser
+    participant O as Guest browser
+    participant API as Crow HTTP routes
+    participant WS as Crow WebSocket
+    participant Room as RoomManager / Room / Game
+    participant DB as SQLite
+
+    X->>API: POST /api/rooms/create + token
+    API->>Room: Create room for player X
+    Room-->>API: Room code
+    API-->>X: 201 + roomCode
+    X->>WS: Connect /ws; send join(token, roomCode)
+    O->>API: POST /api/rooms/join + token + roomCode
+    API->>Room: Add player O
+    API-->>O: Join success
+    O->>WS: Connect /ws; send join(token, roomCode)
+    WS->>Room: Validate session and room; register socket
+    WS-->>X: room_state
+    WS-->>O: room_state
+    X->>WS: move(cell)
+    WS->>Room: Validate player, turn, cell, game status
+    Room-->>WS: Move accepted / updated game
+    opt Game has ended
+        WS->>DB: Record PvP result
+    end
+    WS-->>X: Broadcast room_state
+    WS-->>O: Broadcast room_state
+```
+
+### Authentication and history flow
+
+Registration stores a password hash and creates an in-memory session. Login loads the stored hash and verifies the supplied password before issuing a session token. Authenticated profile and history requests validate that token; match-history retrieval queries SQLite for the user's most recent records.
+
+```mermaid
+flowchart LR
+    Client["Browser"]
+    Auth["AuthService"]
+    Users[("SQLite: users")]
+    Sessions[("In-memory sessions")]
+    History["MatchHistory"]
+    Matches[("SQLite: matches")]
+
+    Client -->|"register / login"| Auth
+    Auth -->|"insert account / read hash"| Users
+    Auth -->|"issue token"| Sessions
+    Sessions -->|"validate token"| Auth
+    Client -->|"authenticated history request"| Auth
+    Auth -->|"authorized user ID"| History
+    History -->|"query recent matches"| Matches
+    Matches --> History
+    History -->|"JSON match list"| Client
+```
 
 ## Object-Oriented Design & OOP Principles
 
-| Principle | Implementation |
-|---|---|
-| **Encapsulation** | `Board` keeps its nine cells private and exposes validated move and state-inspection methods. `Player` similarly provides accessors for its ID, username, and mark. |
-| **Abstraction** | `BotStrategy` defines the common bot interface with `selectMove` and `getDifficulty`, without exposing each algorithm's details. |
-| **Inheritance** | `EasyBot`, `MediumBot`, and `UnbeatableBot` inherit from `BotStrategy` and implement its virtual methods. |
-| **Runtime polymorphism** | The bot endpoint creates a selected strategy through a `std::unique_ptr<BotStrategy>` and invokes it through the base-class interface. |
-| **Composition** | `Game` owns a `Board`. `Room` owns a `Game`, its host, and an optional second player. |
-| **Separation of responsibilities** | `AuthService`, `Database`, `MatchHistory`, `Room`, and `RoomManager` separate authentication, persistence, history, individual room behavior, and room lifecycle management. |
-| **RAII and ownership** | `Database` owns and closes its SQLite connection. Smart pointers manage polymorphic bot instances and room objects. |
-| **Concurrency control** | Mutexes protect shared database access, session state, room registries, and WebSocket connection tracking. |
+This project applies OOP concepts to the game model, bot algorithms, multiplayer rooms, and persistence services.
 
-### Main class responsibilities
+### Encapsulation
 
-- **`Board`** validates cell positions, applies moves, detects wins and draws, and provides the winning line.
-- **`Game`** coordinates turns and game status, and rejects moves that are out of turn, invalid, or made after the game ends.
-- **`BotStrategy` and bot implementations** provide substitutable move-selection algorithms.
-- **`Player`** represents a participant and their assigned mark.
-- **`Room`** coordinates two players, moves, and rematch requests for one game.
-- **`RoomManager`** creates, looks up, joins, and cleans up rooms.
-- **`Database`, `AuthService`, and `MatchHistory`** provide persistence, account/session operations, and match recording/querying.
+`Board` keeps its nine cells private. Callers must use methods such as `makeMove`, which validates the cell before changing the board. `Player` stores its identity and mark behind getters and setters.
+
+### Abstraction
+
+`BotStrategy` defines the bot contract—`selectMove` and `getDifficulty`—without exposing how a strategy chooses a move. Game and server code can depend on that interface rather than a specific algorithm.
+
+### Inheritance
+
+`EasyBot`, `MediumBot`, and `UnbeatableBot` derive from `BotStrategy`. Each subclass supplies its own move-selection implementation and difficulty label.
+
+### Runtime polymorphism
+
+The server chooses the requested strategy and stores it as a `std::unique_ptr<BotStrategy>`. Calling `selectMove` through this base pointer dispatches to the selected subclass implementation at runtime.
+
+### Composition
+
+`Game` owns a `Board`; a `Room` owns a `Game`, its X player, and an optional O player. These objects form larger game features from collaborating objects rather than using inheritance for unrelated relationships.
+
+```text
+RoomManager
+  └── manages Rooms
+        ├── has a Game
+        │     └── has a Board
+        ├── has Player X
+        └── may have Player O
+```
+
+### Single responsibility and service separation
+
+Classes divide responsibilities: `Board` models cells and winning lines; `Game` manages turns and status; `Room` manages one multiplayer game; `RoomManager` manages room lifetimes; `AuthService` handles credentials and sessions; `Database` owns SQLite access; and `MatchHistory` handles match records.
+
+### RAII and resource ownership
+
+`Database` opens its SQLite connection during construction and closes it in its destructor. Smart pointers express ownership for bot strategies and room instances, helping ensure resources are released with their owners.
+
+### Thread safety
+
+The multithreaded Crow server shares state across requests. Mutexes protect shared database operations, authentication sessions, room management, and WebSocket connection tracking from unsynchronized concurrent access.
+
+### Main class relationships
+
+```text
+BotStrategy (abstract)
+  ├── EasyBot
+  ├── MediumBot
+  └── UnbeatableBot
+
+RoomManager ── manages ──> Room ── owns ──> Game ── owns ──> Board
+                                  └── contains Player X and optional Player O
+
+AuthService ── uses ──> Database <── uses ── MatchHistory
+```
 
 ## Database Schema & ER Design
 
-The schema is defined in [`database/schema.sql`](database/schema.sql). SQLite foreign-key enforcement is enabled by the application.
+The schema in [`database/schema.sql`](database/schema.sql) defines two persistent entities: users and completed matches. SQLite foreign-key enforcement is enabled by the application.
 
 ```text
-users
-  id              INTEGER  PK
-  username        TEXT     UNIQUE, case-insensitive
-  email           TEXT     UNIQUE, case-insensitive
-  password_hash   TEXT
-  created_at      DATETIME
-      | 1
-      | 0..*
-matches
-  id              INTEGER  PK
-  player_x_id     INTEGER  FK -> users.id, required
-  player_o_id     INTEGER  FK -> users.id, nullable
-  winner_id       INTEGER  FK -> users.id, nullable
-  game_mode       TEXT     bot | pvp
-  bot_difficulty  TEXT     easy | medium | unbeatable | NULL
-  result          TEXT     X_WON | O_WON | DRAW
-  created_at      DATETIME
+                     +-------------------------+
+                     | users                   |
+                     +-------------------------+
+                     | PK id                   |
+                     | username (unique)       |
+                     | email (unique)          |
+                     | password_hash           |
+                     | created_at              |
+                     +------------+------------+
+                                  | 1
+                 +----------------+----------------+
+                 | 0..*            | 0..*           | 0..*
+        player_x_id       player_o_id         winner_id
+                 |                 |                  |
+                 +-----------------v------------------+
+                     +-------------------------+
+                     | matches                 |
+                     +-------------------------+
+                     | PK id                   |
+                     | FK player_x_id NOT NULL |
+                     | FK player_o_id NULL     |
+                     | FK winner_id NULL       |
+                     | game_mode               |
+                     | bot_difficulty NULL     |
+                     | result                  |
+                     | created_at              |
+                     +-------------------------+
 ```
 
-Each match references the X player and can reference an O player; `player_o_id` is nullable for bot matches. `winner_id` is nullable for draws. Deleting a player cascades to matches where they are X or O, while deleting the winner sets `winner_id` to `NULL`. The schema uses `CHECK` constraints for game mode, bot difficulty, and result, and indexes user names, emails, and the player foreign keys.
+### `users` entity
+
+Each user has an integer primary key, a case-insensitively unique username and email, an Argon2id password hash, and a creation timestamp. The username and email columns have indexes to support lookup.
+
+### `matches` entity
+
+Each match stores its mode (`bot` or `pvp`), result (`X_WON`, `O_WON`, or `DRAW`), optional bot difficulty, and creation timestamp. `player_x_id` is required; `player_o_id` is nullable for bot games; and `winner_id` is nullable for draws. Foreign keys reference `users.id`. Deleting a user cascades to matches where they are X or O, while deleting a referenced winner sets `winner_id` to `NULL`.
+
+### Relationships and constraints
+
+One user can be associated with many matches in each participant/winner role. `CHECK` constraints restrict allowed modes, bot difficulties, and results. Indexes exist on both account lookup columns and the match player foreign keys.
 
 ## Project Directory Structure
 
@@ -129,17 +302,34 @@ Important C++ headers in `include/` correspond to implementations in `src/`. `af
 
 ## REST API Reference
 
-The Crow server exposes JSON endpoints under `/api`. Authenticated HTTP requests should send `Authorization: Bearer <session-token>`. The server also accepts a `token` query parameter; use the authorization header instead to avoid putting credentials in URLs. Successful registration and login return a session token.
+The Crow server exposes JSON endpoints under `/api`; requests and responses use JSON unless noted otherwise. Successful registration and login return a session token. For authenticated HTTP requests, include the issued session token in the `Authorization` header. The server also accepts a `token` query parameter, but the header is preferable because it avoids placing credentials in URLs.
+
+### Authentication endpoints
 
 | Method | Endpoint | Purpose | Authentication |
 |---|---|---|---|
-| `POST` | `/api/auth/register` | Register with `username`, `email`, and `password`; returns a user and token. | No |
-| `POST` | `/api/auth/login` | Log in with `username` or `email` and `password`; returns a user and token. | No |
-| `POST` | `/api/auth/logout` | Invalidate the supplied session. | Token accepted |
+| `POST` | `/api/auth/register` | Register using `username`, `email`, and `password`; returns a user and session token. | No |
+| `POST` | `/api/auth/login` | Log in using `username` or `email` and `password`; returns a user and session token. | No |
+| `POST` | `/api/auth/logout` | Invalidate the supplied session token. | Token accepted |
 | `GET` | `/api/auth/me` | Return the authenticated user's profile. | Yes |
+
+### Bot endpoint
+
+| Method | Endpoint | Purpose | Authentication |
+|---|---|---|---|
 | `POST` | `/api/bot/move` | Select a bot move for a supplied board. | Yes |
+
+### Multiplayer room endpoints
+
+| Method | Endpoint | Purpose | Authentication |
+|---|---|---|---|
 | `POST` | `/api/rooms/create` | Create a private room; returns its code. | Yes |
 | `POST` | `/api/rooms/join` | Join a room using `roomCode`. | Yes |
+
+### Match history endpoints
+
+| Method | Endpoint | Purpose | Authentication |
+|---|---|---|---|
 | `POST` | `/api/matches/record` | Record a match result. | Yes |
 | `GET` | `/api/matches/history` | Retrieve up to 30 match records for the user. | Yes |
 
@@ -228,13 +418,26 @@ The bridge serves the web application on port `3000` and starts/proxies to the C
 
 ## Security & Engineering Practices
 
-- Passwords are stored as Argon2id hashes with per-password salts; plaintext passwords are not stored.
-- Account and match database operations use SQLite prepared statements.
-- User names and emails have case-insensitive uniqueness constraints, and user input has basic registration validation.
-- Authenticated API operations validate in-memory session tokens on the server.
-- Multiplayer moves are checked against the authenticated player, turn order, board state, and game status.
-- SQLite foreign keys and `CHECK` constraints enforce the match data model.
-- Mutexes protect shared database, session, room, and WebSocket state.
-- CMake enables C++17 and compiler warnings for GNU/Clang; automated tests are registered with CTest.
+### Password handling
 
-Sessions and active rooms are in memory, so a backend restart invalidates sessions and clears rooms. Before exposing the service publicly, deploy it behind HTTPS/WSS and review token generation, request validation, operational logging, and production configuration for the intended threat model.
+Passwords are stored as salted Argon2id hashes rather than plaintext. Registration validates basic username, email, and minimum-password-length requirements.
+
+### Database safety and integrity
+
+Account and match queries use SQLite prepared statements. Case-insensitive uniqueness constraints protect usernames and emails, while foreign keys and `CHECK` constraints enforce valid relationships and match values.
+
+### Authentication and authorization
+
+Protected HTTP routes validate session tokens on the server. WebSocket room actions are associated with an authenticated user, and the server checks that user's identity before accepting gameplay actions.
+
+### Multiplayer validation
+
+The server checks participant identity, turn order, cell availability, and game status before accepting a move. The browser client is not the authority for game outcomes.
+
+### Concurrency and testing
+
+Mutexes protect shared database, session, room, and WebSocket state. CMake configures C++17 and compiler warnings for GNU/Clang; CTest runs the registered game and server-logic tests.
+
+### Deployment considerations
+
+Sessions and active rooms are in memory, so a backend restart invalidates sessions and clears rooms. Before exposing the application publicly, use HTTPS/WSS and review token generation, request validation, operational logging, and production configuration for the intended threat model.
