@@ -7,6 +7,7 @@ This document focuses on the system context and the main C++ class relationships
 The browser is the user-facing client. It communicates with the C++ Crow server using HTTP for account, bot, room setup, and history operations, and WebSockets for live multiplayer. The optional TypeScript bridge serves the browser assets and proxies requests to Crow. The server delegates game and service logic to `afterlight_core`; SQLite persists user and match data, while sessions, active rooms, and socket connections remain in memory.
 
 ```mermaid
+%%{init: {"theme": "base", "themeVariables": {"fontSize": "20px"}, "flowchart": {"nodeSpacing": 60, "rankSpacing": 80}}}%%
 flowchart LR
     Player((Player))
     Browser["Browser client<br/>web/index.html · web/style.css · web/app.js"]
@@ -32,6 +33,7 @@ flowchart LR
 ## Class diagram
 
 ```mermaid
+%%{init: {"theme": "base", "themeVariables": {"fontSize": "20px"}}}%%
 classDiagram
     class CrowServer {
         <<process entry point>>
