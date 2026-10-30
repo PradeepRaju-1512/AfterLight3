@@ -119,36 +119,28 @@ flowchart TD
 Room creation and joining begin with authenticated HTTP requests. Each client then connects to `/ws` and sends a `join` message with its token and room code. After joining, the server validates each move against the room's players and game state, records a completed match, and broadcasts updated state.
 
 ```mermaid
-sequenceDiagram
-    participant X as Host browser
-    participant O as Guest browser
-    participant API as Crow HTTP routes
-    participant WS as Crow WebSocket
-    participant Room as RoomManager / Room / Game
-    participant History as MatchHistory / Database
-    participant DB as SQLite
-
-    X->>API: POST /api/rooms/create + token
-    API->>Room: Create room for player X
-    Room-->>API: Room code
-    API-->>X: 201 + roomCode
-    X->>WS: Connect /ws; send join(token, roomCode)
-    O->>API: POST /api/rooms/join + token + roomCode
-    API->>Room: Add player O
-    API-->>O: Join success
-    O->>WS: Connect /ws; send join(token, roomCode)
-    WS->>Room: Validate session and room; register both sockets
-    WS-->>X: room_state
-    WS-->>O: room_state
-    X->>WS: move(cell)
-    WS->>Room: Validate identity, turn, cell, and game status
-    Room-->>WS: Accept move and update Game
-    opt Game has ended
-        WS->>History: Record PvP result
-        History->>DB: Insert match row
-    end
-    WS-->>X: Broadcast room_state
-    WS-->>O: Broadcast room_state
+flowchart TD
+    A["Host creates room with authenticated HTTP request"] --> B["Server creates room and returns room code"]
+    B --> C["Host connects to WebSocket and sends join message"]
+    C --> D["Server validates session and room, then registers connection"]
+    D --> E["Guest joins room with authenticated HTTP request"]
+    E --> F["Server adds guest to room"]
+    F --> G["Guest connects to WebSocket and sends join message"]
+    G --> H["Server validates session and room, then registers connection"]
+    H --> I["Server broadcasts initial room state"]
+    I --> J["Current player sends move with cell index"]
+    J --> K{"Is the move valid for this player and turn?"}
+    K -->|No| L["Server sends an error"]
+    L --> J
+    K -->|Yes| M["Room updates the game state"]
+    M --> N{"Is the game finished?"}
+    N -->|Yes| O["MatchHistory records result in SQLite"]
+    N -->|No| P["Server broadcasts updated room state"]
+    P --> J
+    O --> Q{"Do both players request a rematch?"}
+    Q -->|Yes| R["Server resets game and broadcasts new room state"]
+    R --> J
+    Q -->|No| S["Game remains finished until rematch"]
 ```
 
 The room code is created over HTTP and is not itself a WebSocket credential; both players must also provide valid session tokens when joining the socket. The server broadcasts the latest room state after connection and accepted moves. If a move ends the game, the server records the result before broadcasting the updated state.
